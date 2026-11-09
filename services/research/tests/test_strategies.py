@@ -27,3 +27,12 @@ def test_unknown_strategy_is_rejected():
         assert "Unsupported strategy" in str(error)
     else:
         raise AssertionError("Expected unsupported strategy to fail")
+
+
+def test_trend_filter_uses_only_completed_higher_timeframe_closes():
+    bars=[]
+    for i in range(60):
+        close=Decimal(100+i)
+        bars.append(Bar(i*900000,close-Decimal("0.2"),close+Decimal("0.5"),close-Decimal("0.5"),close,(i+1)*900000))
+    assert trend_at(bars,49*900000,20,50) is None
+    assert trend_at(bars,50*900000,20,50)=="long"
