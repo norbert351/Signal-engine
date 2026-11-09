@@ -9,9 +9,9 @@ Signal Engine is a rule-based market analysis and trading signal backend for cry
 - Binance USD-M Futures public candle adapter with paginated historical backfill.
 - OANDA v20 and Twelve Data forex adapters with historical range support.
 - EMA trend-pullback and range breakout/retest rule evaluators for 5m/15m and 4h/1d analysis.
-- Signal validation, reward/risk checks, duplicate protection, expiry, and stale-candle rejection.
+- Signal validation, reward/risk checks, duplicate protection, expiry, stale-candle rejection, and higher-timeframe close-time guards against lookahead.
 - BullMQ workers for ingestion, scanning, paper tracking, backtest execution, and Telegram delivery.
-- Python research API with next-bar-open backtests, cost assumptions, conservative stop-first same-candle handling, non-overlapping positions, and train/validation/out-of-sample reports.
+- Python research API with historical strategy generation, 100-day indicator warmup, next-bar-open entries, two partial targets, fees, spread, slippage, directional funding, conservative stop-first same-candle handling, non-overlapping positions, and train/validation/out-of-sample reports.
 - Telegram outbox with delivery claims, retries, and deduplication.
 - Admin-protected strategy approval, activation, and backtest submission endpoints.
 - Docker Compose services for PostgreSQL, Redis, API, workers, and research.
