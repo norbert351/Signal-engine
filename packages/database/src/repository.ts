@@ -2,7 +2,7 @@ import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { db } from "./index.js";
 import { candles, instruments, notificationOutbox, signals, strategyConfigs } from "./schema.js";
 export async function listInstruments(){return db.select().from(instruments).orderBy(instruments.market,instruments.symbol);}
-export async function listSignals(filters:{market?:string;symbol?:string;status?:string;limit?:number}){
+export async function listSignals(filters:{market?:string|undefined;symbol?:string|undefined;status?:string|undefined;limit?:number|undefined}){
  const conditions=[];if(filters.market)conditions.push(eq(signals.market,filters.market));if(filters.symbol)conditions.push(eq(signals.symbol,filters.symbol));if(filters.status)conditions.push(eq(signals.status,filters.status));
  return db.select().from(signals).where(conditions.length?and(...conditions):undefined).orderBy(desc(signals.publishedAt)).limit(Math.min(Math.max(filters.limit??50,1),200));
 }
