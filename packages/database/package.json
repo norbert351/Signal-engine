@@ -21,6 +21,10 @@
     "./ingestion-repository": {
       "types": "./dist/ingestion-repository.d.ts",
       "import": "./dist/ingestion-repository.js"
+    },
+    "./admin-repository": {
+      "types": "./dist/admin-repository.d.ts",
+      "import": "./dist/admin-repository.js"
     }
   },
   "scripts": {
