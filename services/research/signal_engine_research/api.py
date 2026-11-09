@@ -39,6 +39,8 @@ class CostsInput(BaseModel):
 class BacktestInput(BaseModel):
     strategy_key: str
     strategy_params: dict = Field(default_factory=dict)
+    evaluation_start: int | None = None
+    evaluation_end: int | None = None
     bars: list[BarInput]
     trend_bars: list[BarInput] = Field(default_factory=list)
     setups: list[SetupInput] | None = None
@@ -53,13 +55,16 @@ def run_backtest(payload: BacktestInput):
     try:
         bars = [Bar(**item.model_dump()) for item in payload.bars]
         setups = [Setup(**item.model_dump()) for item in payload.setups] if payload.setups is not None else generate_setups(payload.strategy_key,bars,[Bar(**item.model_dump()) for item in payload.trend_bars],payload.strategy_params)
+        if payload.evaluation_start is not None: setups=[s for s in setups if s.signal_time>=payload.evaluation_start]
+        if payload.evaluation_end is not None: setups=[s for s in setups if s.signal_time<=payload.evaluation_end]
+        evaluation_bars=[b for b in bars if (payload.evaluation_start is None or b.timestamp>=payload.evaluation_start) and (payload.evaluation_end is None or b.timestamp<=payload.evaluation_end)]
         costs = CostModel(**payload.costs.model_dump())
-        train, validation, out_of_sample = chronological_split(bars)
+        train, validation, out_of_sample = chronological_split(evaluation_bars)
         def run_segment(segment):
             timestamps = {bar.timestamp for bar in segment}
             selected = [setup for setup in setups if setup.signal_time in timestamps]
             return summarize(simulate(segment, selected, costs))
-        trades = simulate(bars, setups, costs)
+        trades = simulate(evaluation_bars, setups, costs)
         return {
             "metrics": {
                 "overall": summarize(trades),
@@ -67,6 +72,7 @@ def run_backtest(payload: BacktestInput):
                 "validation": run_segment(validation),
                 "outOfSample": run_segment(out_of_sample),
                 "outOfSampleBars": len(out_of_sample),
+                "evaluationBars": len(evaluation_bars),
             },
             "trades": [t.__dict__ for t in trades],
             "generatedSetupCount": len(setups),
