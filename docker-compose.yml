@@ -39,7 +39,7 @@ services:
     ports: ["4000:4000"]
     command: ["sh", "-c", "pnpm --filter @signal-engine/database db:migrate && pnpm --filter @signal-engine/api start"]
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch(\u0027http://127.0.0.1:4000/api/v1/health\u0027).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -56,8 +56,8 @@ services:
       RESEARCH_SERVICE_URL: http://research:8000
       BINANCE_BASE_URL: https://fapi.binance.com
       OANDA_BASE_URL: ${OANDA_BASE_URL:-https://api-fxpractice.oanda.com}
+      OANDA_ACCOUNT_ID: ${OANDA_ACCOUNT_ID:-}
       OANDA_API_TOKEN: ${OANDA_API_TOKEN:-}
-      TWELVE_DATA_API_KEY: ${TWELVE_DATA_API_KEY:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       TELEGRAM_CHAT_IDS: ${TELEGRAM_CHAT_IDS:-}
@@ -66,6 +66,8 @@ services:
       RUN_INITIAL_BACKFILL: ${RUN_INITIAL_BACKFILL:-false}
       BACKFILL_START: ${BACKFILL_START:-}
       BACKFILL_END: ${BACKFILL_END:-}
+      CRYPTO_SYMBOLS: ${CRYPTO_SYMBOLS:-BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT,DOGEUSDT,ADAUSDT,LINKUSDT,AVAXUSDT,LTCUSDT,DOTUSDT,TRXUSDT,TONUSDT,SUIUSDT,NEARUSDT,APTUSDT,ARBUSDT,OPUSDT,UNIUSDT,BCHUSDT}
+      FOREX_SYMBOLS: ${FOREX_SYMBOLS:-EUR_USD,GBP_USD,USD_JPY,EUR_JPY,XAU_USD}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
