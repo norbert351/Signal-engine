@@ -18,6 +18,6 @@ def test_metrics_and_out_of_sample_split():
 
 def test_backtest_prevents_overlapping_positions():
     bars=[Bar(i,Decimal("100"),Decimal("102"),Decimal("99"),Decimal("101")) for i in range(6)]
-    setups=[Setup(0,"long",Decimal("98"),Decimal("101.5"),Decimal("0.01")),Setup(1,"long",Decimal("98"),Decimal("101.5"),Decimal("0.01"))]
+    setups=[Setup(0,"long",Decimal("98"),Decimal("103"),Decimal("0.01")),Setup(1,"long",Decimal("98"),Decimal("101.5"),Decimal("0.01"))]
     trades=simulate(bars,setups,CostModel(fee_bps_per_side=Decimal("0"),spread_bps=Decimal("0"),slippage_bps=Decimal("0")))
     assert len(trades)==1
