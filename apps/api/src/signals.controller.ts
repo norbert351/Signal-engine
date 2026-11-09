@@ -1,5 +1,5 @@
 import { Controller, Get, Query } from "@nestjs/common";
-import { listSignals } from "@signal-engine/database/dist/repository.js";
+import { listSignals } from "@signal-engine/database/repository";
 @Controller("signals")
 export class SignalsController {
  @Get()
