@@ -1,4 +1,4 @@
-import { and,asc,eq,gt,inArray } from "drizzle-orm";
+import { and,asc,eq,gt,inArray,lte } from "drizzle-orm";
 import { db } from "@signal-engine/database";
 import { candles,paperTrades,signalEvents,signals } from "@signal-engine/database";
 export async function processPaperTrades(){
@@ -6,7 +6,7 @@ export async function processPaperTrades(){
  for(const signal of candidates){const existingRows=await db.select().from(paperTrades).where(eq(paperTrades.signalId,signal.id)).limit(1);const existing=existingRows[0];
   if(!existing&&signal.expiresAt<=new Date()){await db.update(signals).set({status:"expired"}).where(eq(signals.id,signal.id));await db.insert(signalEvents).values({signalId:signal.id,eventType:"expired",payload:{reason:"expired_before_paper_entry"}});continue;}
   const start=existing?.entryTime??signal.publishedAt;
-  const bars=await db.select().from(candles).where(and(eq(candles.instrumentId,signal.instrumentId),eq(candles.timeframe,signal.timeframe),eq(candles.isComplete,true),gt(candles.openTime,start))).orderBy(asc(candles.openTime)).limit(300);
+  const bars=await db.select().from(candles).where(and(eq(candles.instrumentId,signal.instrumentId),eq(candles.timeframe,signal.timeframe),eq(candles.isComplete,true),gt(candles.openTime,start),lte(candles.closeTime,signal.expiresAt))).orderBy(asc(candles.openTime)).limit(300);
   if(!existing){const first=bars[0];if(!first)continue;const [created]=await db.insert(paperTrades).values({signalId:signal.id,status:"open",direction:signal.direction,entryPrice:first.open,entryTime:first.openTime}).onConflictDoNothing().returning();if(!created)continue;opened++;await db.update(signals).set({status:"active"}).where(eq(signals.id,signal.id));await db.insert(signalEvents).values({signalId:signal.id,eventType:"paper_entry",payload:{entryPrice:first.open,entryTime:first.openTime.toISOString()}});}
   const trade=existing??(await db.select().from(paperTrades).where(eq(paperTrades.signalId,signal.id)).limit(1))[0];if(!trade)continue;
   const target=Number((signal.targets as Array<{price:string}>)[0]?.price);const stop=Number(signal.stopLoss);const entry=Number(trade.entryPrice);let outcome:string|undefined,exitPrice:number|undefined,exitTime:Date|undefined;
