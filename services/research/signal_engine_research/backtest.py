@@ -11,6 +11,7 @@ class Bar:
     high: Decimal
     low: Decimal
     close: Decimal
+    close_timestamp: int | None = None
 
 @dataclass(frozen=True)
 class Setup:
