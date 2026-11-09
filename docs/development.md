@@ -27,7 +27,9 @@ Admin routes require the `x-admin-api-key` header. A strategy must have a comple
 
 ## Backtest request shape
 
-`POST /backtests` accepts a strategy key/version, entry bars, higher-timeframe trend bars, strategy parameters, and execution cost assumptions. Bars use millisecond Unix timestamps and decimal-compatible OHLC values. The worker sends jobs to the Python research service, which generates EMA pullback or breakout/retest setups from historical candles, enters on the next bar open, applies costs, resolves same-bar stop/target ambiguity stop-first, and reports train, validation, and out-of-sample metrics.
+Preferred flow: use `GET /instruments` to find an instrument ID, then submit `POST /backtests` with `strategyKey`, `strategyVersion`, `instrumentId`, `timeframe`, `trendTimeframe`, `start`, `end`, `strategyParams`, and `assumptions`. The worker loads stored candles and includes 100 days of indicator warmup before the requested evaluation window. The research service generates EMA pullback or breakout/retest setups using only candles available at each signal time, enters on the next bar open, models two partial targets, fees, spread, slippage and directional funding, resolves same-bar stop/target ambiguity stop-first, prevents overlapping positions, and reports train, validation, and out-of-sample metrics.
+
+A manual dataset containing `bars` and `trendBars` is also accepted for imported data. Bars use millisecond Unix timestamps and decimal-compatible OHLC values.
 
 Example dataset:
 ```json
