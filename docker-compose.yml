@@ -17,6 +17,47 @@ services:
     ports: ["6379:6379"]
     command: ["redis-server", "--appendonly", "yes"]
     volumes: ["redis_data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  research:
+    build:
+      context: ./services/research
+      dockerfile: Dockerfile
+    ports: ["8000:8000"]
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      API_PORT: 4000
+      DATABASE_URL: postgresql://signal:signal@postgres:5432/signal_engine
+      REDIS_URL: redis://redis:6379
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+    ports: ["4000:4000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      DATABASE_URL: postgresql://signal:signal@postgres:5432/signal_engine
+      REDIS_URL: redis://redis:6379
+      RESEARCH_SERVICE_URL: http://research:8000
+      BINANCE_BASE_URL: https://fapi.binance.com
+      OANDA_BASE_URL: ${OANDA_BASE_URL:-https://api-fxpractice.oanda.com}
+      OANDA_API_TOKEN: ${OANDA_API_TOKEN:-}
+      TWELVE_DATA_API_KEY: ${TWELVE_DATA_API_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      research: { condition: service_started }
 volumes:
   postgres_data:
   redis_data:
