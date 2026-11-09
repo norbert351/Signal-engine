@@ -69,7 +69,7 @@ def simulate(bars: list[Bar], setups: list[Setup], costs: CostModel) -> list[Tra
             stop_hit = future.low <= setup.stop if is_long else future.high >= setup.stop
             if stop_hit:
                 exit_price = min(setup.stop, future.open) if is_long else max(setup.stop, future.open)
-                exit_time = future.timestamp
+                exit_time = future.close_timestamp if future.close_timestamp is not None else future.timestamp
                 gross = (exit_price - entry) / entry if is_long else (entry - exit_price) / entry
                 holding_hours = Decimal(exit_time - entry_bar.timestamp) / Decimal("3600000")
                 realized_gross += remaining / Decimal("100") * gross
@@ -100,7 +100,7 @@ def simulate(bars: list[Bar], setups: list[Setup], costs: CostModel) -> list[Tra
                 break
         if not closed:
             future = ordered[-1]
-            exit_price, exit_time = future.close, future.timestamp
+            exit_price, exit_time = future.close, (future.close_timestamp if future.close_timestamp is not None else future.timestamp)
             if remaining > 0:
                 gross = (exit_price - entry) / entry if is_long else (entry - exit_price) / entry
                 holding_hours = Decimal(exit_time - entry_bar.timestamp) / Decimal("3600000")
