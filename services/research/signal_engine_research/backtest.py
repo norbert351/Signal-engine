@@ -47,7 +47,7 @@ def simulate(bars: list[Bar], setups: list[Setup], costs: CostModel) -> list[Tra
         entry = entry_bar.open
         is_long = setup.direction == "long"
         risk = entry - setup.stop if is_long else setup.stop - entry
-        if risk <= 0:
+        if risk <= 0 or (is_long and entry >= setup.target) or (not is_long and entry <= setup.target):
             continue
         exit_price: Decimal | None = None
         exit_time = entry_bar.timestamp
