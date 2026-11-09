@@ -38,9 +38,10 @@ def simulate(bars: list[Bar], setups: list[Setup], costs: CostModel) -> list[Tra
         raise ValueError("bar timestamps must be unique")
     setup_by_time = {s.signal_time: s for s in setups}
     trades: list[Trade] = []
+    next_available_index = 0
     for i, bar in enumerate(ordered[:-1]):
         setup = setup_by_time.get(bar.timestamp)
-        if setup is None:
+        if setup is None or i + 1 < next_available_index:
             continue
         entry_bar = ordered[i + 1]
         entry = entry_bar.open
@@ -51,18 +52,21 @@ def simulate(bars: list[Bar], setups: list[Setup], costs: CostModel) -> list[Tra
         exit_price: Decimal | None = None
         exit_time = entry_bar.timestamp
         reason = ""
-        for future in ordered[i + 1:]:
+        for future_index, future in enumerate(ordered[i + 1:], start=i + 1):
             stop_hit = future.low <= setup.stop if is_long else future.high >= setup.stop
             target_hit = future.high >= setup.target if is_long else future.low <= setup.target
             if stop_hit:
                 exit_price, exit_time, reason = (min(setup.stop, future.open) if is_long else max(setup.stop, future.open)), future.timestamp, "stop"
+                next_available_index = future_index + 1
                 break
             if target_hit:
                 exit_price, exit_time, reason = setup.target, future.timestamp, "target"
+                next_available_index = future_index + 1
                 break
         if exit_price is None:
             future = ordered[-1]
             exit_price, exit_time, reason = future.close, future.timestamp, "data_end"
+            next_available_index = len(ordered)
         gross = (exit_price - entry) / entry if is_long else (entry - exit_price) / entry
         holding_hours = Decimal(exit_time - entry_bar.timestamp) / Decimal("3600000")
         net = calculate_net_return(gross, costs, holding_hours)
