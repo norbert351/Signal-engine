@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
 from .models import CostModel
+from .engine import net_return as calculate_net_return
 
 @dataclass(frozen=True)
 class Bar:
@@ -54,7 +55,7 @@ def simulate(bars: list[Bar], setups: list[Setup], costs: CostModel) -> list[Tra
             stop_hit = future.low <= setup.stop if is_long else future.high >= setup.stop
             target_hit = future.high >= setup.target if is_long else future.low <= setup.target
             if stop_hit:
-                exit_price, exit_time, reason = setup.stop, future.timestamp, "stop"
+                exit_price, exit_time, reason = (min(setup.stop, future.open) if is_long else max(setup.stop, future.open)), future.timestamp, "stop"
                 break
             if target_hit:
                 exit_price, exit_time, reason = setup.target, future.timestamp, "target"
@@ -63,7 +64,8 @@ def simulate(bars: list[Bar], setups: list[Setup], costs: CostModel) -> list[Tra
             future = ordered[-1]
             exit_price, exit_time, reason = future.close, future.timestamp, "data_end"
         gross = (exit_price - entry) / entry if is_long else (entry - exit_price) / entry
-        net = gross - (costs.fee_bps_per_side * 2 + costs.spread_bps + costs.slippage_bps * 2) / Decimal("10000")
+        holding_hours = Decimal(exit_time - entry_bar.timestamp) / Decimal("3600000")
+        net = calculate_net_return(gross, costs, holding_hours)
         trades.append(Trade(setup.direction, entry_bar.timestamp, exit_time, entry, exit_price, gross, net, reason))
     return trades
 
