@@ -26,7 +26,7 @@ def atr_at(bars: list[Bar], index: int, period: int) -> Decimal | None:
     return sum(ranges,Decimal("0"))/Decimal(period)
 
 def trend_at(bars: list[Bar], timestamp: int, fast_period: int, slow_period: int) -> str | None:
-    available=[bar for bar in bars if bar.timestamp<=timestamp]
+    available=[bar for bar in bars if (bar.close_timestamp if bar.close_timestamp is not None else bar.timestamp)<=timestamp]
     if len(available)<slow_period:
         return None
     fast=ema_series([b.close for b in available],fast_period)[-1]
@@ -49,7 +49,7 @@ def trend_lookup(bars: list[Bar], fast_period: int, slow_period: int) -> tuple[l
         elif fast[i]>slow[i] and bar.close>fast[i]: directions.append("long")
         elif fast[i]<slow[i] and bar.close<fast[i]: directions.append("short")
         else: directions.append(None)
-    return [b.timestamp for b in bars],directions
+    return [b.close_timestamp if b.close_timestamp is not None else b.timestamp for b in bars],directions
 
 def lookup_trend(times: list[int],directions: list[str | None],timestamp: int) -> str | None:
     index=bisect_right(times,timestamp)-1
@@ -67,7 +67,7 @@ def generate_setups(strategy_key: str, bars: list[Bar], trend_bars: list[Bar], p
     if strategy_key=="ema-trend-pullback":
         start=max(slow,atr_period+1,2)
         for i in range(start,len(bars)-1):
-            direction=lookup_trend(trend_times,trend_directions,bars[i].timestamp)
+            direction=lookup_trend(trend_times,trend_directions,bars[i].close_timestamp if bars[i].close_timestamp is not None else bars[i].timestamp)
             if not direction or fast_ema[i] is None or fast_ema[i-1] is None:continue
             previous,current=bars[i-1],bars[i]
             atr=atr_at(bars,i,atr_period)
