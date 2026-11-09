@@ -26,6 +26,9 @@ class SetupInput(BaseModel):
     stop: Decimal
     target: Decimal
     risk_fraction: Decimal = Decimal("0.01")
+    target2: Decimal | None = None
+    target1_allocation_pct: Decimal = Decimal("50")
+    target2_allocation_pct: Decimal = Decimal("50")
 
 class CostsInput(BaseModel):
     fee_bps_per_side: Decimal = Field(default=Decimal("5"), ge=0)
