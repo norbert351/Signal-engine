@@ -5,10 +5,13 @@ import { processScan } from "./scanner.js";
 import { deliverPending } from "./telegram.js";
 import { processPaperTrades } from "./paper-tracker.js";
 import { processBacktests } from "./backtests.js";
+import { reportWorkerHealth } from "./health.js";
 async function start(){
  const scanWorker=new Worker("market-scan",async job=>{if(job.name==="ingest")return ingestAll();if(job.name==="paper")return processPaperTrades();if(job.name==="backtests")return processBacktests();return processScan();},{connection,concurrency:1});
  const notifyWorker=new Worker("notification-delivery",async()=>deliverPending(),{connection,concurrency:2});
- scanWorker.on("failed",(job,err)=>console.error("scan job failed",job?.id,err));notifyWorker.on("failed",(job,err)=>console.error("notification job failed",job?.id,err));
+ scanWorker.on("failed",(job,err)=>{console.error("scan job failed",job?.id,err);void reportWorkerHealth("degraded",{queue:"market-scan",job:job?.name,error:err.message});});notifyWorker.on("failed",(job,err)=>{console.error("notification job failed",job?.id,err);void reportWorkerHealth("degraded",{queue:"notification-delivery",job:job?.name,error:err.message});});
+ scanWorker.on("completed",job=>void reportWorkerHealth("ok",{queue:"market-scan",lastJob:job.name}));notifyWorker.on("completed",job=>void reportWorkerHealth("ok",{queue:"notification-delivery",lastJob:job.name}));
+ await reportWorkerHealth("ok",{startedAt:new Date().toISOString()});
  await scanQueue.add("ingest",{}, {repeat:{every:300_000},removeOnComplete:100,removeOnFail:500});
  await scanQueue.add("evaluate",{}, {repeat:{every:60_000},removeOnComplete:100,removeOnFail:500});
  await scanQueue.add("paper",{}, {repeat:{every:60_000},removeOnComplete:100,removeOnFail:500});
