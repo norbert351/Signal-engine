@@ -1,0 +1,5 @@
+import {rewardRisk,type Direction} from "./index.js";
+export type RiskPolicy={minimumRewardRisk:number;maximumStopDistancePct:number;maxTargets:number};
+export function validateRisk(direction:Direction,entry:number,stop:number,targets:number[],policy:RiskPolicy):{valid:boolean;reasons:string[];rewardRisk:number[]}{
+ const reasons:string[]=[];if(!Number.isFinite(entry)||entry<=0)reasons.push("Entry must be positive and finite");if(!Number.isFinite(stop)||stop<=0)reasons.push("Stop must be positive and finite");const stopPct=Math.abs(entry-stop)/entry*100;if(stopPct>policy.maximumStopDistancePct)reasons.push("Stop distance exceeds policy");if(targets.length===0||targets.length>policy.maxTargets)reasons.push("Target count outside policy");const ratios:number[]=[];for(const t of targets){try{const rr=rewardRisk(direction,entry,stop,t);ratios.push(rr);if(rr<policy.minimumRewardRisk)reasons.push("Target below minimum reward/risk");}catch{reasons.push("Target is on the invalid side of entry");}}return {valid:reasons.length===0,reasons,rewardRisk:ratios};
+}
