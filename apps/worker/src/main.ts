@@ -1,4 +1,4 @@
-import { Worker, QueueScheduler } from "bullmq";
+import { Worker } from "bullmq";
 import { connection,scanQueue,notificationQueue } from "./queues.js";
 import { ingestAll } from "./ingestion.js";
 import { processScan } from "./scanner.js";
