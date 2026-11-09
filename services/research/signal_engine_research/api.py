@@ -27,14 +27,16 @@ class SetupInput(BaseModel):
     target: Decimal
     risk_fraction: Decimal = Decimal("0.01")
     target2: Decimal | None = None
-    target1_allocation_pct: Decimal = Decimal("50")
-    target2_allocation_pct: Decimal = Decimal("50")
+    target1_allocation_pct: Decimal = Decimal("100")
+    target2_allocation_pct: Decimal = Decimal("0")
     @model_validator(mode="after")
     def validate_setup(self):
         if self.risk_fraction<=0 or self.target1_allocation_pct<0 or self.target1_allocation_pct>100 or self.target2_allocation_pct<0 or self.target2_allocation_pct>100:
             raise ValueError("Invalid risk fraction or target allocation")
         if self.direction=="long" and self.target<=self.stop or self.direction=="short" and self.target>=self.stop:
             raise ValueError("Target and stop are on invalid sides")
+        if self.target2 is None and self.target1_allocation_pct!=Decimal("100"):
+            raise ValueError("A single target must allocate 100 percent")
         if self.target2 is not None:
             if self.direction=="long" and self.target2<=self.target or self.direction=="short" and self.target2>=self.target:
                 raise ValueError("Second target must be beyond the first target")
