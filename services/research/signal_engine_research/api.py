@@ -10,12 +10,15 @@ app = FastAPI(title="Signal Engine Research API", version="0.1.0")
 
 class BarInput(BaseModel):
     timestamp: int
+    close_timestamp: int
     open: Decimal
     high: Decimal
     low: Decimal
     close: Decimal
     @model_validator(mode="after")
     def validate_ohlc(self):
+        if self.close_timestamp<=self.timestamp:
+            raise ValueError("Candle close_timestamp must follow open timestamp")
         if min(self.open,self.high,self.low,self.close)<=0 or self.high < max(self.open, self.close, self.low) or self.low > min(self.open, self.close, self.high):
             raise ValueError("Invalid OHLC bounds")
         return self
