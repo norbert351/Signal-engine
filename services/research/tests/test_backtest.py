@@ -21,3 +21,10 @@ def test_backtest_prevents_overlapping_positions():
     setups=[Setup(0,"long",Decimal("98"),Decimal("103"),Decimal("0.01")),Setup(1,"long",Decimal("98"),Decimal("101.5"),Decimal("0.01"))]
     trades=simulate(bars,setups,CostModel(fee_bps_per_side=Decimal("0"),spread_bps=Decimal("0"),slippage_bps=Decimal("0")))
     assert len(trades)==1
+
+
+def test_partial_targets_weight_realized_return():
+    bars=[Bar(1,Decimal("100"),Decimal("101"),Decimal("99"),Decimal("100")),Bar(2,Decimal("100"),Decimal("111"),Decimal("99"),Decimal("108")),Bar(3,Decimal("108"),Decimal("116"),Decimal("107"),Decimal("115"))]
+    setups=[Setup(1,"long",Decimal("90"),Decimal("110"),Decimal("0.01"),Decimal("120"),Decimal("50"),Decimal("50"))]
+    result=simulate(bars,setups,CostModel(fee_bps_per_side=Decimal("0"),spread_bps=Decimal("0"),slippage_bps=Decimal("0")))
+    assert result[0].gross_return==Decimal("0.125")
