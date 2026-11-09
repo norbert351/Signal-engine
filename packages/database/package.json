@@ -25,6 +25,10 @@
     "./admin-repository": {
       "types": "./dist/admin-repository.d.ts",
       "import": "./dist/admin-repository.js"
+    },
+    "./backtest-repository": {
+      "types": "./dist/backtest-repository.d.ts",
+      "import": "./dist/backtest-repository.js"
     }
   },
   "scripts": {
