@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+vi.mock("@signal-engine/database/repository",()=>({listSignals:vi.fn().mockResolvedValue([])}));
 import { SignalsController } from "./signals.controller.js";
 describe("SignalsController", () => {
  it("returns a filter-aware response", async () => {
