@@ -7,6 +7,8 @@ export class TwelveDataProvider implements MarketDataProvider {
  constructor(private readonly apiKey=process.env.TWELVE_DATA_API_KEY,private readonly baseUrl="https://api.twelvedata.com"){}
  async fetchCandles(symbol:string,interval:CandleInterval,limit=500):Promise<NormalizedCandle[]> {
   if(!this.apiKey) throw new Error("TWELVE_DATA_API_KEY is required");
+  if(!/^[A-Z]{3}_[A-Z]{3}$/.test(symbol)) throw new Error("Invalid forex symbol");
+  if(!Number.isInteger(limit)||limit<1||limit>5000) throw new Error("limit must be 1..5000");
   const url=new URL("/time_series",this.baseUrl);url.searchParams.set("symbol",symbol.replace("_","/"));url.searchParams.set("interval",resolutions[interval]);url.searchParams.set("outputsize",String(Math.min(Math.max(limit,1),5000)));url.searchParams.set("apikey",this.apiKey);url.searchParams.set("timezone","UTC");
   const res=await fetchWithRetry(url,{},12000);if(!res.ok)throw new Error(`Twelve Data request failed: HTTP ${res.status}`);
   const body=await res.json() as {values?:TwelveValue[];status?:string;message?:string};if(!body.values)throw new Error(body.message??"Malformed Twelve Data response");
