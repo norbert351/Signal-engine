@@ -52,7 +52,7 @@ def simulate(bars: list[Bar], setups: list[Setup], costs: CostModel) -> list[Tra
         risk = entry - setup.stop if is_long else setup.stop - entry
         if risk <= 0 or (is_long and entry >= setup.target) or (not is_long and entry <= setup.target):
             continue
-        targets = [(setup.target, setup.target1_allocation_pct)]
+        targets = [(setup.target, setup.target1_allocation_pct if setup.target2 is not None else Decimal("100"))]
         if setup.target2 is not None:
             targets.append((setup.target2, setup.target2_allocation_pct))
         remaining = Decimal("100")
