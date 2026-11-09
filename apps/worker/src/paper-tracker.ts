@@ -1,4 +1,4 @@
-import { and,asc,eq,gt,inArray,lte } from "drizzle-orm";
+import { and,asc,desc,eq,gt,gte,inArray,lte } from "drizzle-orm";
 import { db } from "@signal-engine/database";
 import { candles,paperTrades,signalEvents,signals } from "@signal-engine/database";
 const returnAfterCosts=(direction:string,entry:number,exit:number,costBps:number,entryTime:Date,exitTime:Date,fundingBps:number)=>{const hours=Math.max(0,(exitTime.getTime()-entryTime.getTime())/3600000);const fundingCost=fundingBps*hours/8*(direction==="LONG"?1:-1);return (direction==="LONG"?(exit-entry)/entry:(entry-exit)/entry)-costBps/10000-fundingCost/10000;};
