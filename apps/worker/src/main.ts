@@ -14,6 +14,7 @@ async function start(){
  scanWorker.on("completed",job=>{const result=job.returnvalue as {error?:string;failed?:number}|{error?:string}[]|undefined;const failures=Array.isArray(result)?result.filter(item=>item.error).length:typeof result==="object"&&result!==null&&"failed" in result?Number(result.failed):0;void reportWorkerHealth(failures>0?"degraded":"ok",{queue:"market-scan",lastJob:job.name,failures});});notifyWorker.on("completed",job=>void reportWorkerHealth("ok",{queue:"notification-delivery",lastJob:job.name}));
  await reportWorkerHealth("ok",{startedAt:new Date().toISOString()});
  if(process.env.RUN_INITIAL_BACKFILL==="true"){const start=process.env.BACKFILL_START??"missing";const end=process.env.BACKFILL_END??"missing";const jobId=`historical-backfill-${start}-${end}`.replace(/[^a-zA-Z0-9_-]/g,"_");await scanQueue.add("backfill",{}, {jobId,removeOnComplete:100,removeOnFail:500});}
+ await scanQueue.add("ingest",{}, {jobId:"initial-market-ingestion",removeOnComplete:true,removeOnFail:500});
  await scanQueue.add("ingest",{}, {repeat:{every:300_000},removeOnComplete:100,removeOnFail:500});
  await scanQueue.add("evaluate",{}, {repeat:{every:60_000},removeOnComplete:100,removeOnFail:500});
  await scanQueue.add("paper",{}, {repeat:{every:60_000},removeOnComplete:100,removeOnFail:500});
