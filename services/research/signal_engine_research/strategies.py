@@ -74,10 +74,10 @@ def generate_setups(strategy_key: str, bars: list[Bar], trend_bars: list[Bar], p
             if atr is None or atr<=0:continue
             if direction=="long" and previous.low<=fast_ema[i-1]*Decimal("1.002") and current.close>fast_ema[i] and current.close>current.open:
                 structural=min(b.low for b in bars[max(0,i-atr_period+1):i+1]);stop=min(structural,current.close-atr*stop_mult);risk=current.close-stop
-                if risk>0:setups.append(Setup(current.timestamp,"long",stop,current.close+risk*min_rr,Decimal("0.01")))
+                if risk>0:setups.append(Setup(current.timestamp,"long",stop,current.close+risk*min_rr,Decimal("0.01"),current.close+risk*Decimal("3"),Decimal("50"),Decimal("50")))
             if direction=="short" and previous.high>=fast_ema[i-1]*Decimal("0.998") and current.close<fast_ema[i] and current.close<current.open:
                 structural=max(b.high for b in bars[max(0,i-atr_period+1):i+1]);stop=max(structural,current.close+atr*stop_mult);risk=stop-current.close
-                if risk>0:setups.append(Setup(current.timestamp,"short",stop,current.close-risk*min_rr,Decimal("0.01")))
+                if risk>0:setups.append(Setup(current.timestamp,"short",stop,current.close-risk*min_rr,Decimal("0.01"),current.close-risk*Decimal("3"),Decimal("50"),Decimal("50")))
     elif strategy_key=="range-breakout-retest":
         lookback=int(params.get("rangeLookback",20));tolerance_mult=Decimal(str(params.get("retestToleranceAtr",0.25)))
         if lookback<2 or tolerance_mult<0:raise ValueError("invalid breakout parameters")
