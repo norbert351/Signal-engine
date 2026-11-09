@@ -29,7 +29,7 @@ Admin routes require the `x-admin-api-key` header. A strategy must have a comple
 
 Preferred flow: use `GET /instruments` to find an instrument ID, then submit `POST /backtests` with `strategyKey`, `strategyVersion`, `instrumentId`, `timeframe`, `trendTimeframe`, `start`, `end`, `strategyParams`, and `assumptions`. The worker loads stored candles and includes 100 days of indicator warmup before the requested evaluation window. The research service generates EMA pullback or breakout/retest setups using only candles available at each signal time, enters on the next bar open, models two partial targets, fees, spread, slippage and directional funding, resolves same-bar stop/target ambiguity stop-first, prevents overlapping positions, and reports train, validation, and out-of-sample metrics.
 
-A manual dataset containing `bars` and `trendBars` is also accepted for imported data. Bars use millisecond Unix timestamps and decimal-compatible OHLC values.
+A manual dataset containing `bars` and `trendBars` is also accepted for imported data. Bars use millisecond Unix open and close timestamps and decimal-compatible OHLC values.
 
 Example dataset:
 ```json
@@ -39,8 +39,8 @@ Example dataset:
   "timeframe": "5m",
   "dataset": {
     "strategyParams": {"emaFast": 20, "emaSlow": 50, "atrPeriod": 14, "minRewardRisk": 2},
-    "bars": [{"timestamp": 1760000000000, "open": "100", "high": "102", "low": "99", "close": "101"}],
-    "trendBars": [{"timestamp": 1759999000000, "open": "98", "high": "103", "low": "97", "close": "102"}]
+    "bars": [{"timestamp": 1760000000000, "close_timestamp": 1760000299999, "open": "100", "high": "102", "low": "99", "close": "101"}],
+    "trendBars": [{"timestamp": 1759999000000, "close_timestamp": 1759999899999, "open": "98", "high": "103", "low": "97", "close": "102"}]
   },
   "assumptions": {"fee_bps_per_side": 5, "spread_bps": 2, "slippage_bps": 2, "funding_bps_per_8h": 0}
 }
