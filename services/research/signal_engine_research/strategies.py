@@ -1,4 +1,5 @@
 from decimal import Decimal
+from bisect import bisect_right
 from .backtest import Bar, Setup
 
 def ema_series(values: list[Decimal], period: int) -> list[Decimal | None]:
@@ -39,6 +40,21 @@ def trend_at(bars: list[Bar], timestamp: int, fast_period: int, slow_period: int
         return "short"
     return None
 
+def trend_lookup(bars: list[Bar], fast_period: int, slow_period: int) -> tuple[list[int], list[str | None]]:
+    fast=ema_series([b.close for b in bars],fast_period)
+    slow=ema_series([b.close for b in bars],slow_period)
+    directions=[]
+    for i,bar in enumerate(bars):
+        if fast[i] is None or slow[i] is None: directions.append(None)
+        elif fast[i]>slow[i] and bar.close>fast[i]: directions.append("long")
+        elif fast[i]<slow[i] and bar.close<fast[i]: directions.append("short")
+        else: directions.append(None)
+    return [b.timestamp for b in bars],directions
+
+def lookup_trend(times: list[int],directions: list[str | None],timestamp: int) -> str | None:
+    index=bisect_right(times,timestamp)-1
+    return directions[index] if index>=0 else None
+
 def generate_setups(strategy_key: str, bars: list[Bar], trend_bars: list[Bar], params: dict) -> list[Setup]:
     bars=sorted(bars,key=lambda b:b.timestamp)
     trend_bars=sorted(trend_bars,key=lambda b:b.timestamp)
@@ -47,11 +63,11 @@ def generate_setups(strategy_key: str, bars: list[Bar], trend_bars: list[Bar], p
     fast=int(params.get("emaFast",20));slow=int(params.get("emaSlow",50));atr_period=int(params.get("atrPeriod",14));min_rr=Decimal(str(params.get("minRewardRisk",2)));stop_mult=Decimal(str(params.get("stopAtrMultiple",1.5)))
     if fast<1 or slow<=fast or atr_period<1 or min_rr<=0 or stop_mult<=0:
         raise ValueError("invalid strategy parameters")
-    closes=[b.close for b in bars];fast_ema=ema_series(closes,fast);setups=[]
+    closes=[b.close for b in bars];fast_ema=ema_series(closes,fast);trend_times,trend_directions=trend_lookup(trend_bars,fast,slow);setups=[]
     if strategy_key=="ema-trend-pullback":
         start=max(slow,atr_period+1,2)
         for i in range(start,len(bars)-1):
-            direction=trend_at(trend_bars,bars[i].timestamp,fast,slow)
+            direction=lookup_trend(trend_times,trend_directions,bars[i].timestamp)
             if not direction or fast_ema[i] is None or fast_ema[i-1] is None:continue
             previous,current=bars[i-1],bars[i]
             atr=atr_at(bars,i,atr_period)
