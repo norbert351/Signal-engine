@@ -1,0 +1,2 @@
+CREATE TABLE IF NOT EXISTS paper_trade_records (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),signal_id uuid NOT NULL UNIQUE REFERENCES signal_records(id),status varchar(16) NOT NULL DEFAULT 'open',direction varchar(8) NOT NULL,entry_price numeric(28,12) NOT NULL,entry_time timestamptz NOT NULL,exit_price numeric(28,12),exit_time timestamptz,outcome varchar(16),net_return numeric(16,8),created_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS paper_trade_status_idx ON paper_trade_records(status,entry_time);
