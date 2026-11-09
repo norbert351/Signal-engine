@@ -8,7 +8,7 @@
 4. Add Telegram bot and destination credentials if notifications are wanted.
 5. Run `docker compose up --build`.
 
-The API runs at `http://localhost:4000/api/v1`. Research service health runs at `http://localhost:8000/health`. PostgreSQL migrations and candidate/disabled-strategy seeds run before the API starts. For a one-time historical backfill, set `RUN_INITIAL_BACKFILL=true` with valid `BACKFILL_START` and `BACKFILL_END` UTC timestamps before starting the worker. Backfills are paginated and can take time. Start with a short range and monitor provider quotas.
+The API runs at `http://localhost:4000/api/v1`. Research service health runs at `http://localhost:8000/health`. PostgreSQL migrations and candidate/disabled-strategy seeds run before the API starts. For a one-time historical backfill, set `RUN_INITIAL_BACKFILL=true` with valid `BACKFILL_START` and `BACKFILL_END` UTC timestamps before starting the worker. Backfills are paginated and can take time. Include at least 100 days before your desired evaluation start so EMA and ATR filters have enough warmup history. Start with a short range and monitor provider quotas.
 
 ## Main API routes
 
