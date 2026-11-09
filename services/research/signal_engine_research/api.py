@@ -72,9 +72,9 @@ def run_backtest(payload: BacktestInput):
     try:
         bars = [Bar(**item.model_dump()) for item in payload.bars]
         setups = [Setup(**item.model_dump()) for item in payload.setups] if payload.setups is not None else generate_setups(payload.strategy_key,bars,[Bar(**item.model_dump()) for item in payload.trend_bars],payload.strategy_params)
-        if payload.evaluation_start is not None: setups=[s for s in setups if s.signal_time>=payload.evaluation_start]
-        if payload.evaluation_end is not None: setups=[s for s in setups if s.signal_time<=payload.evaluation_end]
-        evaluation_bars=[b for b in bars if (payload.evaluation_start is None or b.timestamp>=payload.evaluation_start) and (payload.evaluation_end is None or b.timestamp<=payload.evaluation_end)]
+        evaluation_bars=[b for b in bars if (payload.evaluation_start is None or b.timestamp>=payload.evaluation_start) and (payload.evaluation_end is None or (b.close_timestamp is not None and b.close_timestamp<=payload.evaluation_end))]
+        evaluation_times={b.timestamp for b in evaluation_bars}
+        setups=[s for s in setups if s.signal_time in evaluation_times]
         costs = CostModel(**payload.costs.model_dump())
         train, validation, out_of_sample = chronological_split(evaluation_bars)
         def run_segment(segment):
