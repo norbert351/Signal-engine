@@ -105,7 +105,7 @@ def simulate(bars: list[Bar], setups: list[Setup], costs: CostModel) -> list[Tra
                 gross = (exit_price - entry) / entry if is_long else (entry - exit_price) / entry
                 holding_hours = Decimal(exit_time - entry_bar.timestamp) / Decimal("3600000")
                 realized_gross += remaining / Decimal("100") * gross
-                realized_net += remaining / Decimal("100") * calculate_net_return(gross, costs, holding_hours)
+                realized_net += remaining / Decimal("100") * calculate_net_return(gross, position_costs, holding_hours)
             reason = "data_end"
             next_available_index = len(ordered)
         trades.append(Trade(setup.direction, entry_bar.timestamp, exit_time, entry, exit_price, realized_gross, realized_net, reason))
