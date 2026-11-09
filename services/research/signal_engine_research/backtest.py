@@ -19,6 +19,9 @@ class Setup:
     stop: Decimal
     target: Decimal
     risk_fraction: Decimal
+    target2: Decimal | None = None
+    target1_allocation_pct: Decimal = Decimal("50")
+    target2_allocation_pct: Decimal = Decimal("50")
 
 @dataclass(frozen=True)
 class Trade:
@@ -32,7 +35,7 @@ class Trade:
     exit_reason: str
 
 def simulate(bars: list[Bar], setups: list[Setup], costs: CostModel) -> list[Trade]:
-    """Enter at the next bar open. If stop and target hit in one bar, assume stop first."""
+    """Enter next bar open, model partial targets, and resolve ambiguous bars stop-first."""
     ordered = sorted(bars, key=lambda b: b.timestamp)
     if len({b.timestamp for b in ordered}) != len(ordered):
         raise ValueError("bar timestamps must be unique")
@@ -49,28 +52,61 @@ def simulate(bars: list[Bar], setups: list[Setup], costs: CostModel) -> list[Tra
         risk = entry - setup.stop if is_long else setup.stop - entry
         if risk <= 0 or (is_long and entry >= setup.target) or (not is_long and entry <= setup.target):
             continue
-        exit_price: Decimal | None = None
+        targets = [(setup.target, setup.target1_allocation_pct)]
+        if setup.target2 is not None:
+            targets.append((setup.target2, setup.target2_allocation_pct))
+        remaining = Decimal("100")
+        realized_gross = Decimal("0")
+        realized_net = Decimal("0")
+        target_index = 0
+        exit_price = entry
         exit_time = entry_bar.timestamp
-        reason = ""
+        reason = "data_end"
+        closed = False
         for future_index, future in enumerate(ordered[i + 1:], start=i + 1):
             stop_hit = future.low <= setup.stop if is_long else future.high >= setup.stop
-            target_hit = future.high >= setup.target if is_long else future.low <= setup.target
             if stop_hit:
-                exit_price, exit_time, reason = (min(setup.stop, future.open) if is_long else max(setup.stop, future.open)), future.timestamp, "stop"
+                exit_price = min(setup.stop, future.open) if is_long else max(setup.stop, future.open)
+                exit_time = future.timestamp
+                gross = (exit_price - entry) / entry if is_long else (entry - exit_price) / entry
+                holding_hours = Decimal(exit_time - entry_bar.timestamp) / Decimal("3600000")
+                realized_gross += remaining / Decimal("100") * gross
+                realized_net += remaining / Decimal("100") * calculate_net_return(gross, costs, holding_hours)
+                remaining = Decimal("0")
+                reason = "stop"
                 next_available_index = future_index + 1
+                closed = True
                 break
-            if target_hit:
-                exit_price, exit_time, reason = setup.target, future.timestamp, "target"
+            while target_index < len(targets):
+                target, allocation = targets[target_index]
+                target_hit = future.high >= target if is_long else future.low <= target
+                if not target_hit:
+                    break
+                portion = min(remaining, allocation)
+                gross = (target - entry) / entry if is_long else (entry - target) / entry
+                holding_hours = Decimal(future.timestamp - entry_bar.timestamp) / Decimal("3600000")
+                realized_gross += portion / Decimal("100") * gross
+                realized_net += portion / Decimal("100") * calculate_net_return(gross, costs, holding_hours)
+                remaining -= portion
+                exit_price, exit_time = target, future.timestamp
+                target_index += 1
+            if remaining <= Decimal("0.0001"):
+                remaining = Decimal("0")
+                reason = "target"
                 next_available_index = future_index + 1
+                closed = True
                 break
-        if exit_price is None:
+        if not closed:
             future = ordered[-1]
-            exit_price, exit_time, reason = future.close, future.timestamp, "data_end"
+            exit_price, exit_time = future.close, future.timestamp
+            if remaining > 0:
+                gross = (exit_price - entry) / entry if is_long else (entry - exit_price) / entry
+                holding_hours = Decimal(exit_time - entry_bar.timestamp) / Decimal("3600000")
+                realized_gross += remaining / Decimal("100") * gross
+                realized_net += remaining / Decimal("100") * calculate_net_return(gross, costs, holding_hours)
+            reason = "data_end"
             next_available_index = len(ordered)
-        gross = (exit_price - entry) / entry if is_long else (entry - exit_price) / entry
-        holding_hours = Decimal(exit_time - entry_bar.timestamp) / Decimal("3600000")
-        net = calculate_net_return(gross, costs, holding_hours)
-        trades.append(Trade(setup.direction, entry_bar.timestamp, exit_time, entry, exit_price, gross, net, reason))
+        trades.append(Trade(setup.direction, entry_bar.timestamp, exit_time, entry, exit_price, realized_gross, realized_net, reason))
     return trades
 
 def summarize(trades: list[Trade]) -> dict[str, str | int]:
