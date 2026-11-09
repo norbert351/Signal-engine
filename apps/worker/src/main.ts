@@ -13,7 +13,7 @@ async function start(){
  scanWorker.on("failed",(job,err)=>{console.error("scan job failed",job?.id,err);void reportWorkerHealth("degraded",{queue:"market-scan",job:job?.name,error:err.message});});notifyWorker.on("failed",(job,err)=>{console.error("notification job failed",job?.id,err);void reportWorkerHealth("degraded",{queue:"notification-delivery",job:job?.name,error:err.message});});
  scanWorker.on("completed",job=>void reportWorkerHealth("ok",{queue:"market-scan",lastJob:job.name}));notifyWorker.on("completed",job=>void reportWorkerHealth("ok",{queue:"notification-delivery",lastJob:job.name}));
  await reportWorkerHealth("ok",{startedAt:new Date().toISOString()});
- if(process.env.RUN_INITIAL_BACKFILL==="true"){const start=process.env.BACKFILL_START??"missing";const end=process.env.BACKFILL_END??"missing";await scanQueue.add("backfill",{}, {jobId:`historical-backfill-${start}-${end}`,removeOnComplete:100,removeOnFail:500});}
+ if(process.env.RUN_INITIAL_BACKFILL==="true"){const start=process.env.BACKFILL_START??"missing";const end=process.env.BACKFILL_END??"missing";const jobId=`historical-backfill-${start}-${end}`.replace(/[^a-zA-Z0-9_-]/g,"_");await scanQueue.add("backfill",{}, {jobId,removeOnComplete:100,removeOnFail:500});}
  await scanQueue.add("ingest",{}, {repeat:{every:300_000},removeOnComplete:100,removeOnFail:500});
  await scanQueue.add("evaluate",{}, {repeat:{every:60_000},removeOnComplete:100,removeOnFail:500});
  await scanQueue.add("paper",{}, {repeat:{every:60_000},removeOnComplete:100,removeOnFail:500});
