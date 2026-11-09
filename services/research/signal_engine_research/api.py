@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, model_validator
 from .backtest import Bar, Setup, simulate, summarize, chronological_split
 from .models import CostModel
+from .strategies import generate_setups
 
 app = FastAPI(title="Signal Engine Research API", version="0.1.0")
 
@@ -33,8 +34,11 @@ class CostsInput(BaseModel):
     funding_bps_per_8h: Decimal = Decimal("0")
 
 class BacktestInput(BaseModel):
+    strategy_key: str
+    strategy_params: dict = Field(default_factory=dict)
     bars: list[BarInput]
-    setups: list[SetupInput]
+    trend_bars: list[BarInput] = Field(default_factory=list)
+    setups: list[SetupInput] | None = None
     costs: CostsInput = Field(default_factory=CostsInput)
 
 @app.get("/health")
@@ -45,7 +49,7 @@ def health():
 def run_backtest(payload: BacktestInput):
     try:
         bars = [Bar(**item.model_dump()) for item in payload.bars]
-        setups = [Setup(**item.model_dump()) for item in payload.setups]
+        setups = [Setup(**item.model_dump()) for item in payload.setups] if payload.setups is not None else generate_setups(payload.strategy_key,bars,[Bar(**item.model_dump()) for item in payload.trend_bars],payload.strategy_params)
         costs = CostModel(**payload.costs.model_dump())
         train, validation, out_of_sample = chronological_split(bars)
         def run_segment(segment):
@@ -62,6 +66,7 @@ def run_backtest(payload: BacktestInput):
                 "outOfSampleBars": len(out_of_sample),
             },
             "trades": [t.__dict__ for t in trades],
+            "generatedSetupCount": len(setups),
             "assumptions": payload.costs.model_dump(mode="json"),
         }
     except (ValueError, ArithmeticError) as exc:
