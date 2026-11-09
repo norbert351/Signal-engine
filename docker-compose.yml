@@ -37,6 +37,12 @@ services:
       REDIS_URL: redis://redis:6379
       ADMIN_API_KEY: ${ADMIN_API_KEY:-}
     ports: ["4000:4000"]
+    command: ["sh", "-c", "pnpm --filter @signal-engine/database db:migrate && pnpm --filter @signal-engine/api start"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch(\u0027http://127.0.0.1:4000/api/v1/health\u0027).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -54,10 +60,13 @@ services:
       TWELVE_DATA_API_KEY: ${TWELVE_DATA_API_KEY:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_CHAT_IDS: ${TELEGRAM_CHAT_IDS:-}
+      PAPER_ROUND_TRIP_COST_BPS: ${PAPER_ROUND_TRIP_COST_BPS:-12}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       research: { condition: service_started }
+      api: { condition: service_healthy }
 volumes:
   postgres_data:
   redis_data:
