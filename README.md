@@ -6,8 +6,8 @@ Signal Engine is a rule-based market analysis and trading signal backend for cry
 
 - pnpm/Turborepo monorepo with NestJS API and TypeScript packages.
 - PostgreSQL schema and ordered SQL migrations for instruments, OHLCV candles, versioned strategies, signals, events, backtests, Telegram outbox, system health, and paper trades.
-- Binance USD-M Futures public candle adapter with paginated historical backfill.
-- OANDA v20 and Twelve Data forex adapters with historical range support.
+- Binance USD-M perpetual futures public candle adapter with paginated historical backfill for a fixed 20-pair USDT universe.
+- OANDA v20 midpoint candle adapter with historical range support for EUR/USD, GBP/USD, USD/JPY, EUR/JPY, and XAU/USD.
 - EMA trend-pullback and range breakout/retest rule evaluators for 5m/15m and 4h/1d analysis.
 - Signal validation, reward/risk checks, duplicate protection, expiry, stale-candle rejection, and higher-timeframe close-time guards against lookahead.
 - BullMQ workers for ingestion, scanning, paper tracking, backtest execution, and Telegram delivery.
@@ -21,7 +21,7 @@ Signal Engine is a rule-based market analysis and trading signal backend for cry
 
 This repository has been populated through GitHub commits, but the full build has not yet been executed in a local runtime. GitHub Actions has not yet returned a verified run. The API and workers need integration testing against real provider credentials and a running PostgreSQL/Redis stack before production use. Strategy configurations are seeded disabled and unapproved. They require a completed out-of-sample backtest and an explicit admin review note before activation.
 
-The candidate universe starts with 10 crypto perpetual symbols and 10 forex pairs. Provider availability, contract listing, spreads, data gaps, and account/regional access must be checked. Historical results are estimates, not guarantees of future performance.
+The configured universe is 20 USDT perpetual crypto pairs and five OANDA instruments: EUR/USD, GBP/USD, USD/JPY, EUR/JPY, and XAU/USD. Provider availability, contract listing, spreads, data gaps, and OANDA account/regional access must be checked. Historical results are estimates, not guarantees of future performance.
 
 ## Getting started
 
