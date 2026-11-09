@@ -1,12 +1,19 @@
 # Market data providers
 
-## Binance USD-M Futures
-Uses public `/fapi/v1/klines` data. No API key is needed for public candles. This adapter is read-only and does not include order endpoints.
+## Binance USD-M perpetual futures
+
+Signal Engine reads public USD-M perpetual futures market data through Binance's `/fapi/v1/klines` endpoint. No Binance API key is required for public candles. The adapter is read-only and does not include account, order, or execution endpoints.
+
+The configured universe is 20 USDT perpetual pairs. The worker collects completed OHLCV candles and supports historical range backfills.
 
 ## OANDA v20
-Uses the instrument candles endpoint with midpoint prices. Set `OANDA_API_TOKEN` and choose the practice or live base URL explicitly. Broker account availability and regional restrictions apply. The adapter does not access account orders or place trades.
 
-## Twelve Data
-Fallback forex time-series adapter. Set `TWELVE_DATA_API_KEY`. Check plan limits and symbol coverage before enabling broad polling.
+OANDA is the sole configured Forex and metals market-data provider. Signal Engine reads midpoint candles from the v20 instrument candles endpoint. Set `OANDA_API_TOKEN` and configure `OANDA_BASE_URL` for the intended OANDA environment. The default example uses the live pricing host. OANDA account eligibility and regional availability apply.
 
-All providers normalize into timestamped OHLCV candles. Consumers must persist only completed candles for strategy evaluation, retain provider provenance, monitor staleness, and handle rate limits. Do not merge candle series from different providers without recording the source change.
+The configured instruments are EUR/USD, GBP/USD, USD/JPY, EUR/JPY, and XAU/USD. XAU/USD is gold quoted in US dollars. The provider uses OANDA instrument codes such as `EUR_USD` and `XAU_USD`.
+
+## Data handling
+
+All provider candles are normalized into timestamped OHLCV records. Strategy evaluation uses completed candles only, retains provider provenance, checks staleness, and must backfill gaps. Crypto and Forex candles remain separate provider/instrument series. Do not merge candles from different providers without recording the source change.
+
+Market data access is read-only. No exchange trading credentials, wallet keys, order placement, or automated execution are part of Signal Engine.
