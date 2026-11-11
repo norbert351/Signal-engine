@@ -36,3 +36,25 @@ def test_trend_filter_uses_only_completed_higher_timeframe_closes():
         bars.append(Bar(i*900000,close-Decimal("0.2"),close+Decimal("0.5"),close-Decimal("0.5"),close,(i+1)*900000))
     assert trend_at(bars,49*900000,20,50) is None
     assert trend_at(bars,50*900000,20,50)=="long"
+
+
+def test_all_six_strategies_are_registered_and_generate_without_lookahead_errors():
+    from signal_engine_research.strategies import SUPPORTED_STRATEGIES
+    bars = rising(220)
+    trend = rising(220)
+    assert len(SUPPORTED_STRATEGIES) == 6
+    for key in SUPPORTED_STRATEGIES:
+        setups = generate_setups(key, bars, trend, {})
+        assert isinstance(setups, list)
+        for setup in setups:
+            assert setup.signal_time <= bars[-2].timestamp
+
+
+def test_new_strategy_parameter_validation():
+    bars = rising(120)
+    try:
+        generate_setups("range-breakout-retest", bars, bars, {"rangeLookback": 1})
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Expected invalid breakout parameters to fail")

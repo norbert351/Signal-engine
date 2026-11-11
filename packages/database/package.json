@@ -33,13 +33,22 @@
     "./health-repository": {
       "types": "./dist/health-repository.d.ts",
       "import": "./dist/health-repository.js"
+    },
+    "./paper-trade-repository": {
+      "types": "./dist/paper-trade-repository.d.ts",
+      "import": "./dist/paper-trade-repository.js"
+    },
+    "./system-repository": {
+      "types": "./dist/system-repository.d.ts",
+      "import": "./dist/system-repository.js"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/migrate.ts"
+    "db:migrate": "tsx src/migrate.ts",
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "drizzle-orm": "^0.44.0",
@@ -49,6 +58,7 @@
     "drizzle-kit": "^0.31.0",
     "typescript": "^5.9.0",
     "tsx": "^4.19.0",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "vitest": "^3.2.0"
   }
 }

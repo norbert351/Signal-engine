@@ -1,8 +1,9 @@
+from dataclasses import replace
 from decimal import Decimal
 from typing import Literal
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, model_validator
-from .backtest import Bar, Setup, simulate, summarize, chronological_split
+from .backtest import Bar, Setup, breakdowns, simulate, summarize, chronological_split, walk_forward
 from .models import CostModel
 from .strategies import generate_setups
 
@@ -15,6 +16,7 @@ class BarInput(BaseModel):
     high: Decimal
     low: Decimal
     close: Decimal
+    volume: Decimal = Decimal("0")
     @model_validator(mode="after")
     def validate_ohlc(self):
         if self.close_timestamp<=self.timestamp:
@@ -58,6 +60,10 @@ class BacktestInput(BaseModel):
     strategy_params: dict = Field(default_factory=dict)
     evaluation_start: int | None = None
     evaluation_end: int | None = None
+    symbol: str = "unknown"
+    timeframe: str = "unknown"
+    trading_style: str | None = None
+    expiry_bars: int | None = Field(default=None, ge=1)
     bars: list[BarInput]
     trend_bars: list[BarInput] = Field(default_factory=list)
     setups: list[SetupInput] | None = None
@@ -67,11 +73,42 @@ class BacktestInput(BaseModel):
 def health():
     return {"status": "ok", "service": "signal-engine-research"}
 
+def bar_interval(bars: list[Bar]) -> int:
+    intervals = [later.timestamp - earlier.timestamp for earlier, later in zip(bars, bars[1:]) if later.timestamp > earlier.timestamp]
+    if not intervals:
+        raise ValueError("cannot infer bar interval")
+    return sorted(intervals)[len(intervals) // 2]
+
+
 @app.post("/backtests")
 def run_backtest(payload: BacktestInput):
     try:
         bars = [Bar(**item.model_dump()) for item in payload.bars]
-        setups = [Setup(**item.model_dump()) for item in payload.setups] if payload.setups is not None else generate_setups(payload.strategy_key,bars,[Bar(**item.model_dump()) for item in payload.trend_bars],payload.strategy_params)
+        trend_bars = [Bar(**item.model_dump()) for item in payload.trend_bars]
+        params = {**payload.strategy_params}
+        if payload.expiry_bars is not None:
+            params["expiryBars"] = payload.expiry_bars
+        if payload.setups is not None:
+            setups = [Setup(**item.model_dump()) for item in payload.setups]
+            if payload.expiry_bars is not None and bars:
+                interval = bar_interval(bars)
+                close_by_time = {
+                    bar.timestamp: bar.close_timestamp if bar.close_timestamp is not None else bar.timestamp
+                    for bar in bars
+                }
+                setups = [
+                    replace(
+                        setup,
+                        expires_at=close_by_time.get(setup.signal_time, setup.signal_time) + payload.expiry_bars * interval,
+                    )
+                    for setup in setups
+                ]
+        else:
+            setups = generate_setups(payload.strategy_key, bars, trend_bars, params)
+        setups = [
+            replace(setup, symbol=payload.symbol, timeframe=payload.timeframe, trading_style=payload.trading_style)
+            for setup in setups
+        ]
         evaluation_bars=[b for b in bars if (payload.evaluation_start is None or b.timestamp>=payload.evaluation_start) and (payload.evaluation_end is None or (b.close_timestamp is not None and b.close_timestamp<=payload.evaluation_end))]
         evaluation_times={b.timestamp for b in evaluation_bars}
         setups=[s for s in setups if s.signal_time in evaluation_times]
@@ -90,7 +127,9 @@ def run_backtest(payload: BacktestInput):
                 "outOfSample": run_segment(out_of_sample),
                 "outOfSampleBars": len(out_of_sample),
                 "evaluationBars": len(evaluation_bars),
+                "breakdowns": breakdowns(trades),
             },
+            "walkForward": walk_forward(evaluation_bars, setups, costs) if len(evaluation_bars) >= 40 else [],
             "trades": [t.__dict__ for t in trades],
             "generatedSetupCount": len(setups),
             "assumptions": payload.costs.model_dump(mode="json"),

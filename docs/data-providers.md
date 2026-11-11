@@ -8,7 +8,7 @@ The configured universe is 20 USDT perpetual pairs. The worker collects complete
 
 ## OANDA v20
 
-OANDA is the sole configured Forex and metals market-data provider. Signal Engine reads midpoint candles from the v20 instrument candles endpoint. Set `OANDA_API_TOKEN` and configure `OANDA_BASE_URL` for the intended OANDA environment. The default example uses the live pricing host. OANDA account eligibility and regional availability apply.
+OANDA is the sole configured Forex and metals market-data provider. Signal Engine reads midpoint candles from the v20 instrument candles endpoint. Set `OANDA_API_TOKEN` and configure `OANDA_BASE_URL` for the intended OANDA environment. The example environment uses the practice pricing host; switch `OANDA_BASE_URL` to the live host for production data. OANDA account eligibility and regional availability apply.
 
 The configured instruments are EUR/USD, GBP/USD, USD/JPY, EUR/JPY, and XAU/USD. XAU/USD is gold quoted in US dollars. The provider uses OANDA instrument codes such as `EUR_USD` and `XAU_USD`.
 

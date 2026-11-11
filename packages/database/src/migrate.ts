@@ -1,5 +1,26 @@
 import postgres from "postgres";
-import { readFile } from "node:fs/promises";
-const url=process.env.DATABASE_URL;if(!url)throw new Error("DATABASE_URL is required");
-const client=postgres(url,{max:1});
-try{for(const name of ["0001_initial.sql","0002_seed_defaults.sql","0003_paper_trades.sql","0004_strategy_approval.sql","0005_partial_paper_exits.sql"]){const migration=await readFile(new URL("../drizzle/"+name,import.meta.url),"utf8");await client.unsafe(migration);console.log("Applied "+name);}}finally{await client.end();}
+import { readdir, readFile } from "node:fs/promises";
+
+const url = process.env.DATABASE_URL;
+if (!url) throw new Error("DATABASE_URL is required");
+const client = postgres(url, { max: 1 });
+try {
+  await client`CREATE TABLE IF NOT EXISTS schema_migrations (name varchar(160) PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`;
+  const directory = new URL("../drizzle/", import.meta.url);
+  const names = (await readdir(directory)).filter((name) => name.endsWith(".sql")).sort();
+  for (const name of names) {
+    const [applied] = await client`SELECT name FROM schema_migrations WHERE name = ${name}`;
+    if (applied) {
+      console.log("Skipping " + name);
+      continue;
+    }
+    const migration = await readFile(new URL(name, directory), "utf8");
+    await client.begin(async (transaction) => {
+      await transaction.unsafe(migration);
+      await transaction`INSERT INTO schema_migrations(name) VALUES (${name})`;
+    });
+    console.log("Applied " + name);
+  }
+} finally {
+  await client.end();
+}
