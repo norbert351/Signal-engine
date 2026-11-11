@@ -46,7 +46,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "96mb", "--maxmemory-policy", "noeviction"]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
     expose: ["6379"]
     volumes: ["redis_data:/data"]
     healthcheck:
@@ -54,7 +54,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-    mem_limit: 128m
+    mem_limit: 384m
     cpus: 0.25
     security_opt: ["no-new-privileges:true"]
     logging:
@@ -72,8 +72,8 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-    mem_limit: 256m
-    cpus: 0.5
+    mem_limit: 512m
+    cpus: 1.0
     security_opt: ["no-new-privileges:true"]
     logging:
       driver: json-file
@@ -84,7 +84,7 @@ services:
       context: .
       dockerfile: Dockerfile.worker
     image: signal-engine-worker:local
-    command: ["sh", "-c", "pnpm --filter @signal-engine/database db:migrate"]
+    command: ["node", "packages/database/dist/migrate.js"]
     environment: *common-env
     restart: "no"
     depends_on:

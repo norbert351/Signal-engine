@@ -34,7 +34,10 @@ async function start() {
       async (job) => {
         if (job.name === "backfill") return backfillHistory();
         if (job.name === "backfill-requests") return processBackfillRequests();
-        return ingestAll();
+        const report = await ingestAll();
+        const errors = report.filter((item) => item.error);
+        if (errors.length) console.error("ingestion errors", JSON.stringify(errors).slice(0, 4000));
+        return { symbols: report.length, inserted: report.reduce((total, item) => total + item.inserted, 0), errors: errors.length };
       },
       { connection, concurrency: 1 }
     );

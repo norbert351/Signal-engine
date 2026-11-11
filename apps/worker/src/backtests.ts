@@ -1,4 +1,5 @@
 import { claimQueuedBacktests, finishBacktest, loadBacktestCandles } from "@signal-engine/database/backtest-repository";
+import { errorText } from "./format.js";
 
 const EXPIRY_BARS: Record<string, number> = { "1m": 15, "5m": 6, "15m": 12, "1h": 12, "4h": 12, "1d": 6 };
 const TRADING_STYLE: Record<string, string> = { "1m": "scalping", "5m": "scalping", "15m": "intraday", "1h": "intraday", "4h": "swing", "1d": "swing" };
@@ -59,14 +60,14 @@ export async function processBacktests() {
           setups: dataset.setups ?? null,
           costs: assumptions
         }),
-        signal: AbortSignal.timeout(120000)
+        signal: AbortSignal.timeout(600000)
       });
       const result = (await response.json()) as { metrics?: Record<string, unknown>; detail?: string };
       if (!response.ok || !result.metrics) throw new Error(result.detail ?? `Research service HTTP ${response.status}`);
       await finishBacktest(job.id, result.metrics, "completed");
       completed += 1;
     } catch (error) {
-      await finishBacktest(job.id, { error: error instanceof Error ? error.message : "Backtest failed" }, "failed");
+      await finishBacktest(job.id, { error: errorText(error, "Backtest failed") }, "failed");
       failed += 1;
     }
   }

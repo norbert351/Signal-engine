@@ -48,6 +48,28 @@ suite("database integration", () => {
     expect(fresh.enabled).toBe(true);
   });
 
+  it("persists normalized candles and maps lifecycle timestamp columns", async () => {
+    const instrument = await ingestion.ensureInstrument("test_provider", "crypto_perpetual", "TESTC");
+    const inserted = await ingestion.persistNormalizedCandles(instrument.id, "test_provider", [
+      {
+        interval: "1h",
+        openTime: new Date("2026-01-01T00:00:00Z"),
+        closeTime: new Date("2026-01-01T00:59:59Z"),
+        open: "100",
+        high: "101",
+        low: "99",
+        close: "100.5",
+        volume: "10",
+        complete: true
+      }
+    ]);
+    expect(inserted).toBe(1);
+    const rows = await db.select().from(schema.candles).where(eq(schema.candles.instrumentId, instrument.id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.ingestedAt).toBeInstanceOf(Date);
+    await expect(db.select().from(schema.signalEvents).limit(0)).resolves.toEqual([]);
+  });
+
   it("creates versioned strategy configs with parameter hashes", async () => {
     const first = await admin.createStrategyVersion({ key: "integration-strategy", name: "Integration", parameters: { emaFast: 20 }, riskConfig: { minimumRewardRisk: 2 } });
     const second = await admin.createStrategyVersion({ key: "integration-strategy", name: "Integration", parameters: { emaFast: 21 }, riskConfig: { minimumRewardRisk: 2 } });

@@ -2,6 +2,7 @@ import { BinanceUsdMProvider } from "@signal-engine/market-data";
 import { OandaV20Provider } from "@signal-engine/market-data/oanda";
 import { ensureInstrument, latestCandleTime, persistNormalizedCandles, updateInstrumentMetadata } from "@signal-engine/database/ingestion-repository";
 import type { MarketDataProvider } from "@signal-engine/market-data";
+import { errorText } from "./format.js";
 
 const cryptoSymbols = (process.env.CRYPTO_SYMBOLS ?? "BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT,DOGEUSDT,ADAUSDT,LINKUSDT,AVAXUSDT,LTCUSDT,DOTUSDT,TRXUSDT,TONUSDT,SUIUSDT,NEARUSDT,APTUSDT,ARBUSDT,OPUSDT,UNIUSDT,BCHUSDT").split(",").map((value) => value.trim()).filter(Boolean);
 const forexSymbols = (process.env.FOREX_SYMBOLS ?? "EUR_USD,GBP_USD,USD_JPY,EUR_JPY,XAU_USD").split(",").map((value) => value.trim()).filter(Boolean);
@@ -30,7 +31,7 @@ async function ingestSymbol(provider: MarketDataProvider, market: string, symbol
       const inserted = await persistNormalizedCandles(instrument.id, provider.name, rows);
       report.push({ symbol, interval, inserted, mode: latest ? "incremental" : "initial" });
     } catch (error) {
-      report.push({ symbol, interval, inserted: 0, mode: "incremental", error: error instanceof Error ? error.message : "unknown error" });
+      report.push({ symbol, interval, inserted: 0, mode: "incremental", error: errorText(error) });
     }
     await delay(Number(process.env.INGESTION_REQUEST_DELAY_MS ?? "50"));
   }
@@ -40,14 +41,14 @@ export async function ingestAll() {
   const report: IngestionResult[] = [];
   for (const symbol of cryptoSymbols) {
     try { await ingestSymbol(binance, "crypto_perpetual", symbol, report); }
-    catch (error) { report.push({ symbol, interval: "*", inserted: 0, mode: "initial", error: error instanceof Error ? error.message : "unknown error" }); }
+    catch (error) { report.push({ symbol, interval: "*", inserted: 0, mode: "initial", error: errorText(error) }); }
   }
   if (!process.env.OANDA_API_TOKEN) {
     report.push({ symbol: "*", interval: "*", inserted: 0, mode: "initial", error: "OANDA_API_TOKEN missing; forex ingestion skipped" });
   } else {
     for (const symbol of forexSymbols) {
       try { await ingestSymbol(oanda, "forex", symbol, report); }
-      catch (error) { report.push({ symbol, interval: "*", inserted: 0, mode: "initial", error: error instanceof Error ? error.message : "unknown error" }); }
+      catch (error) { report.push({ symbol, interval: "*", inserted: 0, mode: "initial", error: errorText(error) }); }
     }
   }
   return report;

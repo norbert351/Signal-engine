@@ -14,6 +14,7 @@ import {
 } from "@signal-engine/database/system-repository";
 import { enqueueNotification } from "@signal-engine/database/scanner-repository";
 import { connection } from "./queues.js";
+import { errorText } from "./format.js";
 
 const TIMEFRAMES: CandleInterval[] = ["1m", "5m", "15m", "1h", "4h", "1d"];
 const STALE_TOLERANCE: Record<CandleInterval, number> = { "1m": 5, "5m": 4, "15m": 4, "1h": 3, "4h": 3, "1d": 3 };
@@ -136,7 +137,12 @@ async function checkCandleFreshness(now: Date) {
     return;
   }
   const bySymbol = new Map<string, { provider: string; symbol: string; market: string; stale: string[]; missing: string[]; latest: Record<string, string | null> }>();
+  const oandaConfigured = Boolean(process.env.OANDA_API_TOKEN);
   for (const row of rows) {
+    if (row.provider === "oanda_v20" && !oandaConfigured) {
+      await resolveComponentAlerts(`candles:${row.provider}:${row.symbol}`, []);
+      continue;
+    }
     const key = `${row.provider}:${row.symbol}`;
     const entry = bySymbol.get(key) ?? { provider: row.provider, symbol: row.symbol, market: row.market, stale: [], missing: [], latest: {} };
     entry.latest[row.timeframe] = row.latest ? new Date(row.latest).toISOString() : null;
@@ -171,6 +177,13 @@ async function checkCandleFreshness(now: Date) {
       await emitAlert({ component, severity: "warning", dedupeKey, message: `${entry.symbol} has no stored candles for ${entry.missing.join(", ")}` });
     }
     await resolveComponentAlerts(component, activeKeys);
+  }
+  const current = new Set([...bySymbol.keys()].map((key) => `candles:${key}`));
+  for (const row of await listHealth()) {
+    if (row.component.startsWith("candles:") && !current.has(row.component)) {
+      await recordHealth(row.component, "ok", { retired: true, reason: "instrument disabled or provider not configured" });
+      await resolveComponentAlerts(row.component, []);
+    }
   }
   await recordHealth("candles", staleSymbols ? "degraded" : "ok", { symbols: bySymbol.size, staleSymbols });
 }
@@ -290,18 +303,25 @@ async function checkBackfill() {
 }
 
 let lastRetention = 0;
+let lastRetentionDetails: Record<string, unknown> = {};
 async function maybeRetention() {
-  if (Date.now() - lastRetention < 60 * 60_000) return;
-  lastRetention = Date.now();
-  try {
-    const result = await applyRetention({
-      deliveredNotificationDays: Number(process.env.RETENTION_NOTIFICATION_DAYS ?? "14"),
-      resolvedAlertDays: Number(process.env.RETENTION_ALERT_DAYS ?? "30")
-    });
-    await recordHealth("retention", "ok", { ...result, runAt: new Date().toISOString() });
-  } catch (error) {
-    console.error("Retention failed", error instanceof Error ? error.message : error);
+  if (Date.now() - lastRetention >= 60 * 60_000) {
+    lastRetention = Date.now();
+    try {
+      const result = await applyRetention({
+        deliveredNotificationDays: Number(process.env.RETENTION_NOTIFICATION_DAYS ?? "14"),
+        resolvedAlertDays: Number(process.env.RETENTION_ALERT_DAYS ?? "30")
+      });
+      lastRetentionDetails = { ...result, lastRunAt: new Date(lastRetention).toISOString() };
+    } catch (error) {
+      console.error("Retention failed", error instanceof Error ? error.message : error);
+      lastRetentionDetails = { error: errorText(error, "Retention failed"), lastRunAt: new Date(lastRetention).toISOString() };
+    }
   }
+  await recordHealth("retention", lastRetentionDetails.error ? "degraded" : "ok", {
+    ...lastRetentionDetails,
+    nextRunAt: new Date(lastRetention + 60 * 60_000).toISOString()
+  });
 }
 
 export async function runMonitoring() {

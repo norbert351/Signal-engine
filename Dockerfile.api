@@ -7,7 +7,6 @@ RUN pnpm --filter @signal-engine/api... build
 
 FROM node:22-alpine
 WORKDIR /app
-RUN corepack enable
 COPY --from=build /app /app
 ENV NODE_ENV=production
 ENV API_HOST=0.0.0.0
@@ -15,4 +14,4 @@ ENV API_PORT=4400
 EXPOSE 4400
 USER node
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD node -e "fetch('http://127.0.0.1:4400/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-CMD ["pnpm","--filter","@signal-engine/api","start"]
+CMD ["node","apps/api/dist/main.js"]

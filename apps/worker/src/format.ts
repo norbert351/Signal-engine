@@ -1,5 +1,11 @@
 import { formatPrice } from "@signal-engine/core";
 
+export function errorText(error: unknown, fallback = "unknown error"): string {
+  const cause = error instanceof Error && error.cause instanceof Error ? error.cause.message : undefined;
+  const raw = cause ?? (error instanceof Error ? error.message : fallback);
+  return (raw.split("\n")[0] ?? "").slice(0, 300);
+}
+
 export function escapeHtml(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }

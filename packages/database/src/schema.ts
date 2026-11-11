@@ -56,7 +56,7 @@ export const candles = pgTable(
     volume: numeric("volume", { precision: 36, scale: 12 }),
     isComplete: boolean("is_complete").notNull().default(false),
     source: varchar("source", { length: 32 }).notNull(),
-    ingestedAt: createdAt()
+    ingestedAt: timestamp("ingested_at", { withTimezone: true }).notNull().defaultNow()
   },
   (t) => [
     uniqueIndex("candle_instrument_tf_open_uq").on(t.instrumentId, t.timeframe, t.openTime),
@@ -133,7 +133,7 @@ export const signalEvents = pgTable(
     eventType: varchar("event_type", { length: 32 }).notNull(),
     eventKey: varchar("event_key", { length: 220 }),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
-    occurredAt: createdAt()
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow()
   },
   (t) => [index("signal_event_signal_idx").on(t.signalId, t.occurredAt), uniqueIndex("signal_event_key_uq").on(t.eventKey)]
 );

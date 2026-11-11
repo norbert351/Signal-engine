@@ -1,3 +1,4 @@
+import { errorText } from "./format.js";
 import { BinanceUsdMProvider, normalizeCandles } from "@signal-engine/market-data";
 import type { CandleInterval, MarketDataProvider } from "@signal-engine/market-data";
 import { OandaV20Provider } from "@signal-engine/market-data/oanda";
@@ -44,7 +45,7 @@ async function runBackfillJob(row: BackfillRow) {
     await updateBackfill(row.id, { status: "complete", cursorTime: new Date(end) });
     return { id: row.id, provider: row.provider, symbol: row.symbol, interval: row.timeframe, inserted, status: "complete" as const };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Backfill failed";
+    const message = errorText(error, "Backfill failed");
     await updateBackfill(row.id, { status: "failed", lastError: message });
     return { id: row.id, provider: row.provider, symbol: row.symbol, interval: row.timeframe, inserted, status: "failed" as const, error: message };
   }

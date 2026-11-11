@@ -1,4 +1,4 @@
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 from dataclasses import replace
 from decimal import Decimal
 
@@ -198,6 +198,35 @@ def structure_at(
     return trend, events
 
 
+def structure_events(
+    bars: list[Bar], highs: list[tuple[int, Decimal]], lows: list[tuple[int, Decimal]], right: int = 2
+) -> list[tuple[int, str, Decimal]]:
+    if len(highs) < 2 or len(lows) < 2:
+        return []
+    events: list[tuple[int, str, Decimal]] = []
+    last_high = highs[0]
+    last_low = lows[0]
+    high_cursor = 1
+    low_cursor = 1
+    prior = "range"
+    for index in range(1, len(bars)):
+        while high_cursor < len(highs) and highs[high_cursor][0] + right <= index:
+            last_high = highs[high_cursor]
+            high_cursor += 1
+        while low_cursor < len(lows) and lows[low_cursor][0] + right <= index:
+            last_low = lows[low_cursor]
+            low_cursor += 1
+        if bars[index].close > last_high[1]:
+            event = "CHOCH_UP" if prior == "down" else "BOS_UP"
+            events.append((index, event, last_high[1]))
+            prior = "up"
+        elif bars[index].close < last_low[1]:
+            event = "CHOCH_DOWN" if prior == "up" else "BOS_DOWN"
+            events.append((index, event, last_low[1]))
+            prior = "down"
+    return events
+
+
 def _append_long(
     setups: list[Setup], bar: Bar, stop: Decimal, min_rr: Decimal, target2_multiple: Decimal
 ) -> None:
@@ -260,6 +289,25 @@ def generate_setups(
     closes = [b.close for b in bars]
     fast_ema = ema_series(closes, fast)
     trend_times, trend_directions = trend_lookup(trend_bars, fast, slow)
+    rsi_period = int(params.get("rsiPeriod", 14))
+    needs_swings = strategy_key in ("support-resistance-rejection", "market-structure-continuation", "trend-reversal-momentum")
+    all_highs: list[tuple[int, Decimal]] = []
+    all_lows: list[tuple[int, Decimal]] = []
+    high_indices: list[int] = []
+    low_indices: list[int] = []
+    structure_events_all: list[tuple[int, str, Decimal]] = []
+    event_indices: list[int] = []
+    rsi_values: list[Decimal | None] = []
+    htf_rsi_values: list[Decimal | None] = []
+    if needs_swings:
+        all_highs, all_lows = confirmed_swings(bars, len(bars), 2, 2)
+        high_indices = [item[0] for item in all_highs]
+        low_indices = [item[0] for item in all_lows]
+        structure_events_all = structure_events(bars, all_highs, all_lows, 2)
+        event_indices = [item[0] for item in structure_events_all]
+    if strategy_key == "trend-reversal-momentum":
+        rsi_values = rsi_series(closes, rsi_period)
+        htf_rsi_values = rsi_series([b.close for b in trend_bars], rsi_period)
     setups: list[Setup] = []
 
     for i in range(max(slow, atr_period + 1, 2), len(bars) - 1):
@@ -328,14 +376,17 @@ def generate_setups(
                 continue
             sr_lookback = int(params.get("srLookback", 120))
             tolerance = atr * Decimal(str(params.get("srToleranceAtr", 0.5)))
-            highs, lows = confirmed_swings(bars, i, 2, 2)
             if direction == "long":
-                supports = [price for index, price in lows if i - index <= sr_lookback and bar.low <= price + tolerance and bar.close > price]
+                start = bisect_left(low_indices, i - sr_lookback)
+                end = bisect_right(low_indices, i - 2)
+                supports = [price for index, price in all_lows[start:end] if bar.low <= price + tolerance and bar.close > price]
                 if supports and bar.close > bar.open:
                     level = max(supports)
                     _append_long(setups, bar, min(bar.low, level - atr * Decimal("0.25")), min_rr, target2_multiple)
             else:
-                resistances = [price for index, price in highs if i - index <= sr_lookback and bar.high >= price - tolerance and bar.close < price]
+                start = bisect_left(high_indices, i - sr_lookback)
+                end = bisect_right(high_indices, i - 2)
+                resistances = [price for index, price in all_highs[start:end] if bar.high >= price - tolerance and bar.close < price]
                 if resistances and bar.close < bar.open:
                     level = min(resistances)
                     _append_short(setups, bar, max(bar.high, level + atr * Decimal("0.25")), min_rr, target2_multiple)
@@ -343,12 +394,22 @@ def generate_setups(
         elif strategy_key == "market-structure-continuation":
             if not direction:
                 continue
-            structure_trend, events = structure_at(bars, i, 2, 2)
+            high_end = bisect_right(high_indices, i - 2)
+            low_end = bisect_right(low_indices, i - 2)
+            if high_end < 2 or low_end < 2:
+                continue
+            higher_highs = all_highs[high_end - 1][1] > all_highs[high_end - 2][1]
+            higher_lows = all_lows[low_end - 1][1] > all_lows[low_end - 2][1]
+            lower_highs = all_highs[high_end - 1][1] < all_highs[high_end - 2][1]
+            lower_lows = all_lows[low_end - 1][1] < all_lows[low_end - 2][1]
+            structure_trend = "up" if higher_highs and higher_lows else "down" if lower_highs and lower_lows else "range"
             expected_trend = "up" if direction == "long" else "down"
             if structure_trend != expected_trend:
                 continue
             expected_event = "BOS_UP" if direction == "long" else "BOS_DOWN"
-            recent = [event for event in events if event[0] >= i - 6 and event[1] == expected_event]
+            event_start = bisect_left(event_indices, i - 6)
+            event_end = bisect_right(event_indices, i)
+            recent = [event for event in structure_events_all[event_start:event_end] if event[1] == expected_event]
             if not recent:
                 continue
             structural = (
@@ -363,15 +424,15 @@ def generate_setups(
                 _append_short(setups, bar, stop, min_rr, target2_multiple)
 
         elif strategy_key == "trend-reversal-momentum":
-            structure_trend, events = structure_at(bars, i, 2, 2)
-            recent = [event for event in events if event[0] >= i - 6 and event[1] in ("CHOCH_UP", "CHOCH_DOWN")]
+            event_start = bisect_left(event_indices, i - 6)
+            event_end = bisect_right(event_indices, i)
+            recent = [event for event in structure_events_all[event_start:event_end] if event[1] in ("CHOCH_UP", "CHOCH_DOWN")]
             if not recent:
                 continue
             event = recent[-1]
             reversal_direction = "long" if event[1] == "CHOCH_UP" else "short"
-            rsi = rsi_series(closes, int(params.get("rsiPeriod", 14)))
-            rsi_now = rsi[i]
-            rsi_prior = rsi[i - 1]
+            rsi_now = rsi_values[i]
+            rsi_prior = rsi_values[i - 1]
             if rsi_now is None or rsi_prior is None:
                 continue
             momentum = (
@@ -381,8 +442,7 @@ def generate_setups(
             )
             if not momentum:
                 continue
-            htf_rsi = rsi_series([b.close for b in trend_bars], int(params.get("rsiPeriod", 14)))
-            htf_value = next((value for value in reversed(htf_rsi) if value is not None), None)
+            htf_value = next((value for value in reversed(htf_rsi_values) if value is not None), None)
             if reversal_direction == "long":
                 exhaustion = direction != "long" and (htf_value is None or htf_value <= 48)
             else:
