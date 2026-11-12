@@ -3,6 +3,7 @@ x-common-env: &common-env
   DATABASE_URL: postgresql://${POSTGRES_USER:-signal}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-signal_engine}
   REDIS_URL: redis://redis:6379
   LOG_LEVEL: ${LOG_LEVEL:-info}
+  PG_POOL_MAX: ${PG_POOL_MAX:-4}
 
 x-worker-base: &worker-base
   build:
