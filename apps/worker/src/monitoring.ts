@@ -104,6 +104,15 @@ async function checkBinance() {
   }
 }
 
+function twelveDataQuotaState(usage: { dailyUsage: number | null; planDailyLimit: number | null; planLimit: number | null; planCategory: string | null }) {
+  const safety = Number(process.env.FOREX_CREDIT_SAFETY_MARGIN ?? "80");
+  const selfBudget = Number(process.env.FOREX_DAILY_CREDIT_BUDGET ?? "640");
+  const planCap = (usage.planDailyLimit ?? Number.POSITIVE_INFINITY) - safety;
+  const effectiveDailyBudget = Math.min(selfBudget, planCap);
+  const remaining = effectiveDailyBudget - (usage.dailyUsage ?? 0);
+  return { safetyMargin: safety, selfBudget, effectiveDailyBudget, remaining };
+}
+
 async function checkTwelveData() {
   const apiKey = process.env.TWELVE_DATA_API_KEY;
   if (!apiKey) {
@@ -114,18 +123,27 @@ async function checkTwelveData() {
   try {
     const started = Date.now();
     const usage = await new TwelveDataProvider({ apiKey }).getApiUsage();
-    await recordHealth("provider:twelve_data", "ok", {
+    const quota = twelveDataQuotaState(usage);
+    const status = quota.remaining <= 0 ? "degraded" : "ok";
+    await recordHealth("provider:twelve_data", status, {
       latencyMs: Date.now() - started,
       planCategory: usage.planCategory,
-      planLimit: usage.planLimit,
+      planLimitPerMinute: usage.planLimit,
       dailyUsage: usage.dailyUsage,
-      planDailyLimit: usage.planDailyLimit
+      planDailyLimit: usage.planDailyLimit,
+      ...quota,
+      note: quota.remaining <= 0 ? "daily credit budget/safety margin reached; ingestion paused until quota resets" : "provider reachable"
     });
     await resolveComponentAlerts("provider:twelve_data", []);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Twelve Data provider check failed";
-    await recordHealth("provider:twelve_data", "error", { error: message });
-    await emitAlert({ component: "provider:twelve_data", severity: "critical", dedupeKey: "provider:twelve_data:unavailable", message });
+    const quotaLike = /quota|limit|credits|429/i.test(message);
+    await recordHealth("provider:twelve_data", quotaLike ? "degraded" : "error", { error: message, quotaRelated: quotaLike });
+    if (quotaLike) {
+      await emitAlert({ component: "provider:twelve_data", severity: "warning", dedupeKey: "provider:twelve_data:quota", message });
+    } else {
+      await emitAlert({ component: "provider:twelve_data", severity: "critical", dedupeKey: "provider:twelve_data:unavailable", message });
+    }
   }
 }
 

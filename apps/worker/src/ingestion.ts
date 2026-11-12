@@ -10,7 +10,7 @@ const binance = new BinanceUsdMProvider();
 const twelve = new TwelveDataProvider();
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export type IngestionResult = { symbol: string; interval: string; inserted: number; mode: "initial" | "incremental"; error?: string };
+export type IngestionResult = { symbol: string; interval: string; inserted: number; mode: "initial" | "incremental"; error?: string; info?: string; usage?: Record<string, unknown>; due?: number; spent?: number; cap?: number; quotaExhausted?: boolean };
 
 const FOREX_POLL_MINUTES: Record<CandleInterval, number> = {
   "1d": Number(process.env.FOREX_POLL_1D_MINUTES ?? "1440"),
@@ -25,6 +25,7 @@ const FOREX_POLL_MINUTES: Record<CandleInterval, number> = {
 const FOREX_PRIORITY: CandleInterval[] = ["1d", "4h", "1h", "15m", "5m", "1m"];
 const FOREX_MAX_REQUESTS_PER_RUN = Number(process.env.FOREX_MAX_REQUESTS_PER_RUN ?? "5");
 const FOREX_DAILY_CREDIT_BUDGET = Number(process.env.FOREX_DAILY_CREDIT_BUDGET ?? "640");
+const FOREX_CREDIT_SAFETY_MARGIN = Number(process.env.FOREX_CREDIT_SAFETY_MARGIN ?? "80");
 const FOREX_REQUEST_DELAY_MS = Number(process.env.FOREX_REQUEST_DELAY_MS ?? "8000");
 
 async function ingestSymbol(provider: MarketDataProvider, market: string, symbol: string, report: IngestionResult[]) {
@@ -84,16 +85,23 @@ export async function ingestForex() {
   }
 
   let budget = FOREX_DAILY_CREDIT_BUDGET;
+  let usageSummary: Record<string, unknown> | null = null;
   try {
     const usage = await twelve.getApiUsage();
-    const planCap = usage.planDailyLimit ?? Number.POSITIVE_INFINITY;
+    usageSummary = {
+      planCategory: usage.planCategory,
+      planLimitPerMinute: usage.planLimit,
+      dailyUsage: usage.dailyUsage,
+      planDailyLimit: usage.planDailyLimit
+    };
+    const planCap = (usage.planDailyLimit ?? Number.POSITIVE_INFINITY) - FOREX_CREDIT_SAFETY_MARGIN;
     const used = usage.dailyUsage ?? 0;
     budget = Math.min(FOREX_DAILY_CREDIT_BUDGET, planCap) - used;
   } catch (error) {
     report.push({ symbol: "*", interval: "*", inserted: 0, mode: "incremental", error: `usage check failed: ${errorText(error)}` });
   }
   if (budget <= 0) {
-    report.push({ symbol: "*", interval: "*", inserted: 0, mode: "incremental", error: "Twelve Data daily credit budget exhausted; forex ingestion paused" });
+    report.push({ symbol: "*", interval: "*", inserted: 0, mode: "incremental", error: "Twelve Data daily credit budget/safety margin reached; forex ingestion paused", ...(usageSummary ? { usage: usageSummary } : {}) });
     return report;
   }
 
@@ -119,18 +127,19 @@ export async function ingestForex() {
       const rows = item.latest
         ? await twelve.fetchCandlesRange(item.symbol, item.interval, item.latest.getTime() + 1, now)
         : await twelve.fetchCandles(item.symbol, item.interval, 300);
-      spent += 1;
+      spent += 1; // one /time_series request per series refresh
       const inserted = await persistNormalizedCandles(item.instrumentId, twelve.name, rows);
       report.push({ symbol: item.symbol, interval: item.interval, inserted, mode: item.latest ? "incremental" : "initial" });
     } catch (error) {
       if (error instanceof TwelveDataError && (error.code === 429 || /quota|limit|credits/i.test(error.message))) {
-        report.push({ symbol: item.symbol, interval: item.interval, inserted: 0, mode: "incremental", error: errorText(error) });
+        report.push({ symbol: item.symbol, interval: item.interval, inserted: 0, mode: "incremental", error: errorText(error), quotaExhausted: true });
         break;
       }
       report.push({ symbol: item.symbol, interval: item.interval, inserted: 0, mode: "incremental", error: errorText(error) });
     }
     await delay(FOREX_REQUEST_DELAY_MS);
   }
+  if (usageSummary) report.unshift({ symbol: "*", interval: "*", inserted: 0, mode: "incremental", info: "usage", usage: usageSummary, due: due.length, spent, cap });
   return report;
 }
 

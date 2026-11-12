@@ -18,7 +18,21 @@ Forex and metals candles do not include volume. Signal Engine stores `NULL` volu
 
 ### API credits and quota
 
-The `/time_series` endpoint costs one API credit per symbol request; `/symbol_search` also consumes a credit, while `/api_usage` is free. The ingestion worker reads `/api_usage`, respects the plan's per-minute and daily limits, and enforces a self-imposed daily credit budget (`FOREX_DAILY_CREDIT_BUDGET`, default 640). Only series whose last stored completed candle is older than the configured per-timeframe poll interval are refreshed, so unchanged history is never re-downloaded. The free/basic plan (8 credits/minute, 800 credits/day) cannot support live 1-minute scalping across all five instruments; the default poll schedule prioritizes 15m/1h/4h/1d candles and the scanner safely skips any timeframe whose data is stale.
+The `/time_series` endpoint costs one API credit per symbol request; `/symbol_search` also consumes a credit, while `/api_usage` is free. The ingestion worker reads `/api_usage`, respects the plan's per-minute and daily limits, and enforces a self-imposed daily budget (`FOREX_DAILY_CREDIT_BUDGET`, default 640) with a safety margin (`FOREX_CREDIT_SAFETY_MARGIN`, default 80) so the daily allowance is never exhausted. Only series whose last stored completed candle is older than the configured per-timeframe poll interval are refreshed, so unchanged history is never re-downloaded.
+
+**Realistic budget (Basic plan: 8 credits/min, 800 credits/day, 5 forex instruments):** `/time_series` costs 1 credit per symbol request. With safety margin `FOREX_CREDIT_SAFETY_MARGIN=80` and self-budget `FOREX_DAILY_CREDIT_BUDGET=640`, the effective ceiling is `min(640, 800-80)=640` credits/day (ingestion pauses at/under the margin; allowance never exhausted).
+
+| Timeframe | Poll interval | Requests/symbol/day | Credits/day (5 symbols) | Role |
+|---|---:|---:|---:|---|
+| 1d | 1440m | 1 | 5 | reliable swing confirmation |
+| 4h | 240m | 6 | 30 | reliable intraday/swing |
+| 1h | 60m | 24 | 120 | reliable intraday |
+| 15m | 30m | 48 | 240 | reliable intraday (prioritized) |
+| 5m | 360m | 4 | 20 | best-effort only |
+| 1m | 720m | 2 | 10 | best-effort only |
+| **Total (steady state)** | | | **425** | within 640 budget |
+
+Reliable 15m/1h/4h/1d coverage is prioritized (~395 credits/day) and fits the plan with headroom. **1m/5m forex freshness is best-effort and not guaranteed** on this plan: sustaining closed-candle freshness for 5 symbols would require ~7,200 (1m) or ~1,440 (5m) credits/day, far above plan limits. When budget/margin/quota is reached, ingestion pauses and reports quota state in health; the scanner rejects stale/incomplete candles, so no signals are generated from stale forex data. True low-timeframe forex scalping requires higher plan/credits (not assumed).
 
 ## Data handling
 

@@ -69,7 +69,8 @@ export async function backfillHistory() {
     let remaining: number | null = null;
     try {
       const usage = await twelve.getApiUsage();
-      const planCap = usage.planDailyLimit ?? Number.POSITIVE_INFINITY;
+      const safety = Number(process.env.FOREX_CREDIT_SAFETY_MARGIN ?? "80");
+      const planCap = (usage.planDailyLimit ?? Number.POSITIVE_INFINITY) - safety;
       remaining = Math.min(Number(process.env.FOREX_DAILY_CREDIT_BUDGET ?? "640"), planCap) - (usage.dailyUsage ?? 0);
     } catch {
       remaining = null;

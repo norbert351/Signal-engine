@@ -253,6 +253,12 @@ describe("Twelve Data provider errors and resilience", () => {
     await expect(provider().fetchCandles("EUR_USD", "1m", 1)).rejects.toThrow(/quota exceeded|daily limit/);
   });
 
+  it("reports missing/empty candle payloads as no data when values missing in status response", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ status: "ok", values: [] })));
+    const rows = await provider().fetchCandles("EUR_USD", "1h", 10);
+    expect(rows).toEqual([]);
+  });
+
   it("reports HTTP failures without exposing the API key", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("nope", { status: 503 })));
     await expect(provider().fetchCandles("EUR_USD", "1m", 1)).rejects.toThrow(/HTTP 503/);
