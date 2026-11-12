@@ -47,7 +47,7 @@ const spec = {
         tags: ["instruments"],
         summary: "Stored completed candles",
         parameters: [
-          { name: "provider", in: "path", required: true, schema: { enum: ["binance_usdm", "oanda_v20"] } },
+          { name: "provider", in: "path", required: true, schema: { enum: ["binance_usdm", "twelve_data"] } },
           { name: "symbol", in: "path", required: true, schema: { type: "string" } },
           { name: "timeframe", in: "query", schema: { enum: ["1m", "5m", "15m", "1h", "4h", "1d"] } },
           { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 500 } },

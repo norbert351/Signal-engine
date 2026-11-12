@@ -70,6 +70,32 @@ suite("database integration", () => {
     await expect(db.select().from(schema.signalEvents).limit(0)).resolves.toEqual([]);
   });
 
+  it("seeds the twelve_data forex universe and persists null-volume forex candles", async () => {
+    const rows = await db.select().from(schema.instruments).where(eq(schema.instruments.provider, "twelve_data"));
+    const forex = rows.filter((row) => row.market === "forex");
+    expect(forex.map((row) => row.symbol).sort()).toEqual(["EUR_JPY", "EUR_USD", "GBP_USD", "USD_JPY", "XAU_USD"]);
+    expect(forex.every((row) => row.enabled)).toBe(true);
+    const eurusd = forex.find((row) => row.symbol === "EUR_USD")!;
+    const inserted = await ingestion.persistNormalizedCandles(eurusd.id, "twelve_data", [
+      {
+        interval: "1h",
+        openTime: new Date("2026-01-05T10:00:00Z"),
+        closeTime: new Date("2026-01-05T10:59:59Z"),
+        open: "1.1",
+        high: "1.2",
+        low: "1.0",
+        close: "1.15",
+        volume: null,
+        complete: true
+      }
+    ]);
+    expect(inserted).toBe(1);
+    const stored = await db.select().from(schema.candles).where(eq(schema.candles.instrumentId, eurusd.id));
+    expect(stored).toHaveLength(1);
+    expect(stored[0]?.volume).toBeNull();
+    expect(stored[0]?.source).toBe("twelve_data");
+  });
+
   it("creates versioned strategy configs with parameter hashes", async () => {
     const first = await admin.createStrategyVersion({ key: "integration-strategy", name: "Integration", parameters: { emaFast: 20 }, riskConfig: { minimumRewardRisk: 2 } });
     const second = await admin.createStrategyVersion({ key: "integration-strategy", name: "Integration", parameters: { emaFast: 21 }, riskConfig: { minimumRewardRisk: 2 } });

@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BinanceUsdMProvider } from "./index.js";
-import { OANDA_GRANULARITY, OandaV20Provider } from "./oanda.js";
 import { findMissingCandles, isCandleStale, isForexMarketClosed, normalizeCandles, validateNormalizedCandle } from "./validation.js";
 import type { NormalizedCandle } from "./index.js";
 
@@ -76,43 +75,6 @@ describe("Binance USD-M provider", () => {
     const provider = new BinanceUsdMProvider("https://example.test");
     await expect(provider.fetchCandles("bad symbol", "5m", 1)).rejects.toThrow();
     await expect(provider.fetchCandles("BTCUSDT", "5m", 0)).rejects.toThrow();
-  });
-});
-
-describe("OANDA v20 provider", () => {
-  it("maps every supported interval to a real OANDA granularity", () => {
-    expect(OANDA_GRANULARITY).toEqual({ "1m": "M1", "5m": "M5", "15m": "M15", "1h": "H1", "4h": "H4", "1d": "D" });
-  });
-
-  it("parses midpoint candles and preserves completion", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
-      candles: [
-        { time: "2026-01-05T10:00:00.000000000Z", complete: true, volume: 10, mid: { o: "1.1", h: "1.2", l: "1.0", c: "1.15" } },
-        { time: "2026-01-05T10:15:00.000000000Z", complete: false, volume: 2, mid: { o: "1.15", h: "1.16", l: "1.14", c: "1.155" } }
-      ]
-    })));
-    const provider = new OandaV20Provider("token", "https://example.test");
-    const rows = await provider.fetchCandles("EUR_USD", "15m", 2);
-    expect(rows).toHaveLength(2);
-    expect(rows[0]!.market).toBe("forex");
-    expect(rows[0]!.complete).toBe(true);
-    expect(rows[1]!.complete).toBe(false);
-    expect(rows[0]!.closeTime.getTime() - rows[0]!.openTime.getTime()).toBe(899999);
-  });
-
-  it("validates instrument metadata", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ instrument: { type: "METAL", pipLocation: -2, tradeUnitsPrecision: 0 } })));
-    const provider = new OandaV20Provider("token", "https://example.test");
-    const metadata = await provider.fetchInstrumentMetadata("XAU_USD");
-    expect(metadata.available).toBe(true);
-    expect(metadata.pricePrecision).toBe(3);
-  });
-
-  it("requires a token and valid instrument", async () => {
-    const provider = new OandaV20Provider("", "https://example.test");
-    await expect(provider.fetchCandles("EUR_USD", "1m", 1)).rejects.toThrow(/OANDA_API_TOKEN/);
-    const withToken = new OandaV20Provider("token", "https://example.test");
-    await expect(withToken.fetchCandles("EURUSD", "1m", 1)).rejects.toThrow(/Invalid OANDA instrument/);
   });
 });
 

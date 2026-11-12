@@ -15,12 +15,12 @@ Signal Engine produces explainable, rule-based analysis and publishes trade idea
 - PostgreSQL stores durable records. Redis/BullMQ handles queues, repeatable jobs, and coordination.
 
 ## Providers
-Crypto: Binance USDⓈ-M Futures public market-data endpoints only. Forex and gold: OANDA v20 midpoint candles when account and regional access permit. Never commit provider credentials.
+Crypto: Binance USDⓈ-M Futures public market-data endpoints only. Forex and gold: Twelve Data read-only public market-data endpoints (`/time_series`, `/symbol_search`, `/api_usage`). No brokerage account, account ID, or trading credentials are used. Never commit provider credentials.
 
 ## Candidate universe
 Crypto (20 USDT perpetuals): BTCUSDT, ETHUSDT, SOLUSDT, BNBUSDT, XRPUSDT, DOGEUSDT, ADAUSDT, LINKUSDT, AVAXUSDT, LTCUSDT, DOTUSDT, TRXUSDT, TONUSDT, SUIUSDT, NEARUSDT, APTUSDT, ARBUSDT, OPUSDT, UNIUSDT, BCHUSDT.
 
-Forex and metals (5 OANDA instruments): EUR_USD, GBP_USD, USD_JPY, EUR_JPY, XAU_USD.
+Forex and metals (5 Twelve Data instruments): EUR_USD, GBP_USD, USD_JPY, EUR_JPY, XAU_USD (Twelve Data wire symbols EUR/USD, GBP/USD, USD/JPY, EUR/JPY, XAU/USD).
 
 These are candidates, not a claim that every symbol is currently listed or liquid. Verify provider availability and liquidity at runtime.
 

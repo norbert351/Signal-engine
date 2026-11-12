@@ -1,6 +1,6 @@
 import { Worker } from "bullmq";
 import { connection, ingestionQueue, scanQueue, paperQueue, backtestQueue, notificationQueue, monitorQueue } from "./queues.js";
-import { ingestAll } from "./ingestion.js";
+import { ingestCrypto, ingestForex } from "./ingestion.js";
 import { processScan } from "./scanner.js";
 import { deliverPending } from "./telegram.js";
 import { processPaperTrades } from "./paper-tracker.js";
@@ -34,7 +34,13 @@ async function start() {
       async (job) => {
         if (job.name === "backfill") return backfillHistory();
         if (job.name === "backfill-requests") return processBackfillRequests();
-        const report = await ingestAll();
+        if (job.name === "ingest-forex") {
+          const forexReport = await ingestForex();
+          const forexErrors = forexReport.filter((item) => item.error);
+          if (forexErrors.length) console.error("forex ingestion errors", JSON.stringify(forexErrors).slice(0, 4000));
+          return { symbols: forexReport.length, inserted: forexReport.reduce((total, item) => total + item.inserted, 0), errors: forexErrors.length };
+        }
+        const report = await ingestCrypto();
         const errors = report.filter((item) => item.error);
         if (errors.length) console.error("ingestion errors", JSON.stringify(errors).slice(0, 4000));
         return { symbols: report.length, inserted: report.reduce((total, item) => total + item.inserted, 0), errors: errors.length };
@@ -51,6 +57,8 @@ async function start() {
     }
     await ingestionQueue.add("ingest", {}, { jobId: "initial-market-ingestion", removeOnComplete: true, removeOnFail: 500 });
     await ingestionQueue.add("ingest", {}, { repeat: { every: interval("INGEST_INTERVAL_MS", 300_000) }, removeOnComplete: 100, removeOnFail: 500 });
+    await ingestionQueue.add("ingest-forex", {}, { jobId: "initial-forex-ingestion", removeOnComplete: true, removeOnFail: 500 });
+    await ingestionQueue.add("ingest-forex", {}, { repeat: { every: interval("FOREX_INGEST_INTERVAL_MS", 300_000) }, removeOnComplete: 100, removeOnFail: 500 });
     await ingestionQueue.add("backfill-requests", {}, { repeat: { every: interval("BACKFILL_REQUEST_INTERVAL_MS", 60_000) }, removeOnComplete: 100, removeOnFail: 500 });
   }
 

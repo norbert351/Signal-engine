@@ -10,9 +10,9 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./oanda": {
-      "types": "./dist/oanda.d.ts",
-      "import": "./dist/oanda.js"
+    "./twelve-data": {
+      "types": "./dist/twelve-data.d.ts",
+      "import": "./dist/twelve-data.js"
     }
   },
   "scripts": {

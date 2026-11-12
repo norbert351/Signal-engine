@@ -191,7 +191,7 @@ export async function requestBackfill(input: {
   if (!Number.isFinite(input.startTime.getTime()) || !Number.isFinite(input.endTime.getTime()) || input.startTime >= input.endTime) {
     throw new Error("Backfill start must be before end");
   }
-  if (!["binance_usdm", "oanda_v20"].includes(input.provider)) throw new Error("Unsupported provider");
+  if (!["binance_usdm", "twelve_data"].includes(input.provider)) throw new Error("Unsupported provider");
   if (!["1m", "5m", "15m", "1h", "4h", "1d"].includes(input.timeframe)) throw new Error("Unsupported timeframe");
   const [created] = await db
     .insert(backfillProgress)

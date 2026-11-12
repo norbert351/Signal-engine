@@ -1,7 +1,6 @@
 import { errorText } from "./format.js";
-import { BinanceUsdMProvider, normalizeCandles } from "@signal-engine/market-data";
+import { BinanceUsdMProvider, TwelveDataProvider, normalizeCandles } from "@signal-engine/market-data";
 import type { CandleInterval, MarketDataProvider } from "@signal-engine/market-data";
-import { OandaV20Provider } from "@signal-engine/market-data/oanda";
 import {
   claimBackfillRequests,
   ensureInstrument,
@@ -19,9 +18,9 @@ const CHUNK_MS = Number(process.env.BACKFILL_CHUNK_DAYS ?? "30") * 86_400_000;
 type BackfillRow = typeof backfillProgress.$inferSelect;
 
 function providerFor(row: BackfillRow): { provider: MarketDataProvider; market: string } {
-  if (row.provider === "oanda_v20") {
-    if (!process.env.OANDA_API_TOKEN) throw new Error("OANDA_API_TOKEN is not configured");
-    return { provider: new OandaV20Provider(), market: "forex" };
+  if (row.provider === "twelve_data") {
+    if (!process.env.TWELVE_DATA_API_KEY) throw new Error("TWELVE_DATA_API_KEY is not configured");
+    return { provider: new TwelveDataProvider(), market: "forex" };
   }
   if (row.provider === "binance_usdm") return { provider: new BinanceUsdMProvider(), market: "crypto_perpetual" };
   throw new Error(`Unsupported provider ${row.provider}`);
@@ -63,10 +62,24 @@ export async function backfillHistory() {
   const end = Date.parse(process.env.BACKFILL_END ?? "");
   if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) throw new Error("Set valid BACKFILL_START and BACKFILL_END ISO timestamps");
   const binance = new BinanceUsdMProvider();
-  const oanda = new OandaV20Provider();
+  const twelve = new TwelveDataProvider();
   const results: Array<{ provider: string; symbol: string; interval: string; inserted: number; status: string; error?: string }> = [];
   const plans: Array<[MarketDataProvider, string, string[]]> = [[binance, "crypto_perpetual", crypto]];
-  if (process.env.OANDA_API_TOKEN) plans.push([oanda, "forex", forex]);
+  if (process.env.TWELVE_DATA_API_KEY) {
+    let remaining: number | null = null;
+    try {
+      const usage = await twelve.getApiUsage();
+      const planCap = usage.planDailyLimit ?? Number.POSITIVE_INFINITY;
+      remaining = Math.min(Number(process.env.FOREX_DAILY_CREDIT_BUDGET ?? "640"), planCap) - (usage.dailyUsage ?? 0);
+    } catch {
+      remaining = null;
+    }
+    if (remaining !== null && remaining < 50) {
+      results.push({ provider: "twelve_data", symbol: "*", interval: "*", inserted: 0, status: "skipped", error: `insufficient Twelve Data credits remaining (${remaining}); forex backfill not started` });
+    } else {
+      plans.push([twelve, "forex", forex]);
+    }
+  }
 
   for (const [provider, market, symbols] of plans) {
     for (const symbol of symbols) {

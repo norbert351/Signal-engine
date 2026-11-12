@@ -4,7 +4,7 @@
 
 1. Copy `.env.example` to `.env`.
 2. Set a long random `ADMIN_API_KEY` (at least 16 characters) and a strong `POSTGRES_PASSWORD`.
-3. Add an OANDA v20 personal access token and account ID for forex and XAU/USD candles. Binance USD-M public perpetual candles need no API key.
+3. Add a Twelve Data API key (`TWELVE_DATA_API_KEY`) for Forex and XAU/USD candles. Binance USD-M public perpetual candles need no API key. No brokerage account or account ID is required.
 4. Add a Telegram bot token and destination chat ID(s) if notifications are wanted.
 5. Run `docker compose up --build` or `./scripts/deploy.sh`.
 
@@ -20,7 +20,7 @@ For a one-time historical backfill, set `RUN_INITIAL_BACKFILL=true` with valid `
 
 ## Market scanner
 
-The scanner evaluates the configured 20 USDT perpetual crypto instruments and five OANDA instruments: EUR/USD, GBP/USD, USD/JPY, EUR/JPY, and XAU/USD. It ingests and evaluates 1m, 5m, 15m, 1h, 4h, and 1d candles. Entry/confirmation pairs are 1m/5m, 5m/15m, 15m/1h, 1h/4h, and 4h/1d. Only completed, sufficiently recent candles and enabled, approved strategies can publish signals. Signals must pass stop-distance and minimum reward/risk checks. Duplicate signals are blocked by a deterministic key, and an opposite-direction open signal on the same symbol/timeframe suppresses a conflicting publication. If no strategy passes, no alert is sent.
+The scanner evaluates the configured 20 USDT perpetual crypto instruments and five Twelve Data instruments: EUR/USD, GBP/USD, USD/JPY, EUR/JPY, and XAU/USD. It ingests and evaluates 1m, 5m, 15m, 1h, 4h, and 1d candles. Entry/confirmation pairs are 1m/5m, 5m/15m, 15m/1h, 1h/4h, and 4h/1d. Only completed, sufficiently recent candles and enabled, approved strategies can publish signals. Signals must pass stop-distance and minimum reward/risk checks. Duplicate signals are blocked by a deterministic key, and an opposite-direction open signal on the same symbol/timeframe suppresses a conflicting publication. If no strategy passes, no alert is sent. Forex ingestion is credit-aware: it reads `/api_usage`, enforces `FOREX_DAILY_CREDIT_BUDGET` (default 640) and `FOREX_MAX_REQUESTS_PER_RUN` (default 5), paces requests with `FOREX_REQUEST_DELAY_MS` (default 8000), and polls each timeframe per `FOREX_POLL_*_MINUTES`. On the basic plan this keeps 15m/1h/4h/1d candles fresh while the scanner skips stale lower timeframes.
 
 All six strategy families are implemented: EMA trend pullback, range breakout retest, support/resistance rejection, market-structure continuation, trend-reversal momentum, and volatility-expansion breakout. They remain disabled until separately backtested and approved.
 
@@ -50,7 +50,7 @@ A manual dataset containing `bars` and `trendBars` is also accepted for imported
 
 ## Monitoring and operations
 
-The `worker-monitor` service writes component health, detects stale worker heartbeats, checks database/Redis/Binance/OANDA reachability, detects stale or missing candles (with forex weekend handling), tracks memory/CPU/disk, monitors notification and backfill failures, and deduplicates alerts. New and resolved alerts are sent through the Telegram outbox when configured. Delivered notifications and resolved alerts are pruned by the retention job (`RETENTION_NOTIFICATION_DAYS`, `RETENTION_ALERT_DAYS`).
+The `worker-monitor` service writes component health, detects stale worker heartbeats, checks database/Redis/Binance/Twelve Data reachability, detects stale or missing candles (with forex weekend handling), tracks memory/CPU/disk, monitors notification and backfill failures, and deduplicates alerts. New and resolved alerts are sent through the Telegram outbox when configured. Delivered notifications and resolved alerts are pruned by the retention job (`RETENTION_NOTIFICATION_DAYS`, `RETENTION_ALERT_DAYS`).
 
 Database backups:
 
@@ -64,7 +64,7 @@ Stop the API and workers before restoring. Backups default to `./backups` and ke
 ## Safety boundaries
 
 - Binance integration uses public USD-M Futures market-data endpoints only. No Binance API key is needed for candle retrieval.
-- OANDA market-data requests use a personal access token. Keep it in a private environment variable.
+- Twelve Data market-data requests use an API key on read-only public endpoints. Keep it in a private environment variable.
 - No exchange order-placement or withdrawal code exists. No trading permission is required.
 - Strategies are seeded disabled and unapproved.
 - Paper outcomes begin only with candles after a signal's publication time.

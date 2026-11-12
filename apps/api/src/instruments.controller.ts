@@ -16,7 +16,7 @@ export class InstrumentsController {
 
   @Get(":provider/:symbol/candles")
   async candles(@Param("provider") provider: string, @Param("symbol") symbol: string, @Query("timeframe") timeframe = "5m", @Query("limit") limit = "200", @Query("before") before?: string) {
-    if (!["binance_usdm", "oanda_v20"].includes(provider)) throw new BadRequestException("Unsupported provider");
+    if (!["binance_usdm", "twelve_data"].includes(provider)) throw new BadRequestException("Unsupported provider");
     if (!/^[A-Z0-9_]{5,20}$/.test(symbol)) throw new BadRequestException("Invalid symbol");
     if (!TIMEFRAMES.includes(timeframe)) throw new BadRequestException("Unsupported timeframe");
     const parsedLimit = Number(limit);

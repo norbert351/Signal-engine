@@ -177,3 +177,14 @@ export class BinanceUsdMProvider implements MarketDataProvider {
 
 export { fetchWithRetry } from "./http.js";
 export * from "./validation.js";
+export {
+  TwelveDataProvider,
+  TwelveDataError,
+  TWELVE_DATA_INTERVAL,
+  toTwelveDataSymbol,
+  fromTwelveDataSymbol,
+  parseTwelveDataTime,
+  forexPricePrecision,
+  redactSecrets
+} from "./twelve-data.js";
+export type { TwelveDataUsage, TwelveDataProviderOptions } from "./twelve-data.js";

@@ -1,7 +1,7 @@
 import os from "node:os";
 import { statfs } from "node:fs/promises";
 import { sql } from "@signal-engine/database";
-import { isCandleStale, type CandleInterval } from "@signal-engine/market-data";
+import { isCandleStale, TwelveDataProvider, type CandleInterval } from "@signal-engine/market-data";
 import {
   applyRetention,
   backfillSummary,
@@ -104,27 +104,39 @@ async function checkBinance() {
   }
 }
 
-async function checkOanda() {
-  const token = process.env.OANDA_API_TOKEN;
-  if (!token) {
-    await recordHealth("provider:oanda_v20", "degraded", { configured: false, reason: "OANDA_API_TOKEN not set" });
-    await resolveComponentAlerts("provider:oanda_v20", []);
+async function checkTwelveData() {
+  const apiKey = process.env.TWELVE_DATA_API_KEY;
+  if (!apiKey) {
+    await recordHealth("provider:twelve_data", "degraded", { configured: false, reason: "TWELVE_DATA_API_KEY not set" });
+    await resolveComponentAlerts("provider:twelve_data", []);
     return;
   }
-  const baseUrl = process.env.OANDA_BASE_URL ?? "https://api-fxpractice.oanda.com";
   try {
     const started = Date.now();
-    const response = await fetch(new URL("/v3/instruments/EUR_USD", baseUrl), {
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-      signal: AbortSignal.timeout(10000)
+    const usage = await new TwelveDataProvider({ apiKey }).getApiUsage();
+    await recordHealth("provider:twelve_data", "ok", {
+      latencyMs: Date.now() - started,
+      planCategory: usage.planCategory,
+      planLimit: usage.planLimit,
+      dailyUsage: usage.dailyUsage,
+      planDailyLimit: usage.planDailyLimit
     });
-    if (!response.ok) throw new Error(`OANDA check HTTP ${response.status}`);
-    await recordHealth("provider:oanda_v20", "ok", { latencyMs: Date.now() - started });
-    await resolveComponentAlerts("provider:oanda_v20", []);
+    await resolveComponentAlerts("provider:twelve_data", []);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "OANDA provider check failed";
-    await recordHealth("provider:oanda_v20", "error", { error: message });
-    await emitAlert({ component: "provider:oanda_v20", severity: "critical", dedupeKey: "provider:oanda:unavailable", message });
+    const message = error instanceof Error ? error.message : "Twelve Data provider check failed";
+    await recordHealth("provider:twelve_data", "error", { error: message });
+    await emitAlert({ component: "provider:twelve_data", severity: "critical", dedupeKey: "provider:twelve_data:unavailable", message });
+  }
+}
+
+const ACTIVE_PROVIDER_COMPONENTS = new Set(["provider:binance_usdm", "provider:twelve_data"]);
+
+async function retireStaleProviders() {
+  for (const row of await listHealth()) {
+    if (row.component.startsWith("provider:") && !ACTIVE_PROVIDER_COMPONENTS.has(row.component)) {
+      await recordHealth(row.component, "ok", { retired: true, reason: "provider removed" });
+      await resolveComponentAlerts(row.component, []);
+    }
   }
 }
 
@@ -137,9 +149,9 @@ async function checkCandleFreshness(now: Date) {
     return;
   }
   const bySymbol = new Map<string, { provider: string; symbol: string; market: string; stale: string[]; missing: string[]; latest: Record<string, string | null> }>();
-  const oandaConfigured = Boolean(process.env.OANDA_API_TOKEN);
+  const twelveConfigured = Boolean(process.env.TWELVE_DATA_API_KEY);
   for (const row of rows) {
-    if (row.provider === "oanda_v20" && !oandaConfigured) {
+    if (row.provider === "twelve_data" && !twelveConfigured) {
       await resolveComponentAlerts(`candles:${row.provider}:${row.symbol}`, []);
       continue;
     }
@@ -331,7 +343,8 @@ export async function runMonitoring() {
   await checkDatabase();
   await checkRedis();
   await checkBinance();
-  await checkOanda();
+  await checkTwelveData();
+  await retireStaleProviders();
   await checkCandleFreshness(now);
   await checkHost();
   await checkWorkerHeartbeats();

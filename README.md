@@ -7,7 +7,7 @@ Signal Engine is a rule-based market analysis and trading signal backend for cry
 - pnpm/Turborepo monorepo with NestJS API and TypeScript packages.
 - PostgreSQL schema and ordered SQL migrations for instruments, OHLCV candles, versioned strategies, signals, events, backtests, Telegram outbox, system health/alerts, paper trades, and backfill progress.
 - Binance USD-M perpetual futures public candle adapter with paginated historical backfill for a fixed 20-pair USDT universe.
-- OANDA v20 midpoint candle adapter with historical range support for EUR/USD, GBP/USD, USD/JPY, EUR/JPY, and XAU/USD.
+- Twelve Data Forex and gold market-data adapter with historical range support for EUR/USD, GBP/USD, USD/JPY, EUR/JPY, and XAU/USD. Read-only public market-data endpoints only.
 - Six rule families: EMA trend pullback, range breakout retest, support/resistance rejection, market-structure continuation, trend-reversal momentum, and volatility-expansion breakout.
 - Closed-candle ingestion and scan plans for 1m/5m, 5m/15m, 15m/1h, 1h/4h, and 4h/1d entry/confirmation pairs.
 - Signal validation, reward/risk checks, duplicate protection, opposite-direction conflict suppression, expiry, stale-candle rejection, and higher-timeframe close-time guards against lookahead.
@@ -20,7 +20,7 @@ Signal Engine is a rule-based market analysis and trading signal backend for cry
 
 ## Important limitations
 
-- Binance ingestion is live-testable with public data. OANDA requires `OANDA_API_TOKEN`; without it forex/gold ingestion is skipped and reported as degraded.
+- Binance ingestion is live-testable with public data. Twelve Data requires `TWELVE_DATA_API_KEY`; without it forex/gold ingestion is skipped and reported as degraded. The subscription plan governs credit limits: the worker checks `/api_usage` and never exceeds the configured daily credit budget.
 - Telegram delivery requires `TELEGRAM_BOT_TOKEN` and a chat ID. Without them notifications are not enqueued and the outbox remains empty.
 - Strategy configurations are seeded disabled and unapproved. Activation requires a completed backtest for the same key/version, an out-of-sample segment, minimum total/OOS trade counts, and an explicit human review note.
 - Backtests are estimates. Provider coverage, missing candles, spread/funding assumptions, out-of-sample trade count, drawdown, and robustness must be reviewed before approval.

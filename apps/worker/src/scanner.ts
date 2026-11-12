@@ -27,6 +27,7 @@ const crypto = (process.env.CRYPTO_SYMBOLS ?? "BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,X
   .split(",").map((value) => value.trim()).filter(Boolean);
 const forex = (process.env.FOREX_SYMBOLS ?? "EUR_USD,GBP_USD,USD_JPY,EUR_JPY,XAU_USD")
   .split(",").map((value) => value.trim()).filter(Boolean);
+const forexSet = new Set(forex);
 const symbols = [...crypto, ...forex];
 
 export async function processScan() {
@@ -42,7 +43,7 @@ export async function processScan() {
   let conflicts = 0;
 
   for (const symbol of symbols) {
-    const provider = symbol.includes("_") ? "oanda_v20" : "binance_usdm";
+    const provider = forexSet.has(symbol) ? "twelve_data" : "binance_usdm";
     const instrument = await findInstrument(provider, symbol);
     if (!instrument) { missingInstruments++; continue; }
     if (!instrument.enabled || !instrument.available) { unavailable++; continue; }
