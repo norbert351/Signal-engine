@@ -55,7 +55,7 @@ def test_summarize_reports_risk_metrics():
 def test_walk_forward_produces_chronological_folds():
     from signal_engine_research.backtest import walk_forward
     bars = [Bar(i, Decimal("100"), Decimal("101"), Decimal("99"), Decimal("100")) for i in range(40)]
-    folds = walk_forward(bars, [], CostModel(), 4)
+    folds = walk_forward(bars, [], CostModel(fee_bps_per_side=Decimal("0"),spread_bps=Decimal("0"),slippage_bps=Decimal("0")), 4)
     assert len(folds) == 4
     assert folds[0]["start"] < folds[-1]["end"]
     assert all(fold["bars"] >= 10 for fold in folds)

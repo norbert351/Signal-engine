@@ -1,0 +1,365 @@
+{
+  "strategies": {
+    "range-breakout-retest": {
+      "fixtures": 2,
+      "comparisons": 1,
+      "matches": 0,
+      "material_differences": 1,
+      "status": "BLOCKED",
+      "notes": [
+        {
+          "fixture": "breakout-retest-long-valid",
+          "case": "61|LONG",
+          "issue": "missing_in_py"
+        }
+      ]
+    },
+    "ema-trend-pullback": {
+      "fixtures": 4,
+      "comparisons": 2,
+      "matches": 2,
+      "material_differences": 0,
+      "status": "PARITY_OK",
+      "notes": []
+    },
+    "market-structure-continuation": {
+      "fixtures": 2,
+      "comparisons": 15,
+      "matches": 0,
+      "material_differences": 15,
+      "status": "BLOCKED",
+      "notes": [
+        {
+          "fixture": "ms-continuation-long-valid",
+          "case": "51|LONG",
+          "diffs": [
+            {
+              "field": "stop",
+              "ts": 121.35161558828975,
+              "py": 118.6
+            },
+            {
+              "field": "t1",
+              "ts": 132.2967688234205,
+              "py": 137.8
+            },
+            {
+              "field": "t2",
+              "ts": 135.94515323513076,
+              "py": 144.2
+            }
+          ]
+        },
+        {
+          "fixture": "ms-continuation-long-valid",
+          "case": "52|LONG",
+          "diffs": [
+            {
+              "field": "stop",
+              "ts": 122.46221447484048,
+              "py": 118.6
+            },
+            {
+              "field": "t1",
+              "ts": 133.07557105031904,
+              "py": 140.8
+            },
+            {
+              "field": "t2",
+              "ts": 136.61335657547858,
+              "py": 148.2
+            }
+          ]
+        },
+        {
+          "fixture": "ms-continuation-long-valid",
+          "case": "53|LONG",
+          "diffs": [
+            {
+              "field": "stop",
+              "ts": 124.6,
+              "py": 119.6
+            },
+            {
+              "field": "t1",
+              "ts": 137.8,
+              "py": 147.8
+            },
+            {
+              "field": "t2",
+              "ts": 142.20000000000002,
+              "py": 157.2
+            }
+          ]
+        },
+        {
+          "fixture": "ms-continuation-long-valid",
+          "case": "54|LONG",
+          "diffs": [
+            {
+              "field": "stop",
+              "ts": 124.6,
+              "py": 120.6
+            },
+            {
+              "field": "t1",
+              "ts": 140.8,
+              "py": 148.8
+            },
+            {
+              "field": "t2",
+              "ts": 146.20000000000002,
+              "py": 158.2
+            }
+          ]
+        },
+        {
+          "fixture": "ms-continuation-long-valid",
+          "case": "55|LONG",
+          "diffs": [
+            {
+              "field": "stop",
+              "ts": 123.34977594796813,
+              "py": 120.6
+            },
+            {
+              "field": "t1",
+              "ts": 134.30044810406375,
+              "py": 139.8
+            },
+            {
+              "field": "t2",
+              "ts": 137.9506721560956,
+              "py": 146.2
+            }
+          ]
+        },
+        {
+          "fixture": "ms-continuation-long-valid",
+          "case": "56|LONG",
+          "diffs": [
+            {
+              "field": "stop",
+              "ts": 124.46050623739897,
+              "py": 120.6
+            },
+            {
+              "field": "t1",
+              "ts": 135.07898752520205,
+              "py": 142.8
+            },
+            {
+              "field": "t2",
+              "ts": 138.6184812878031,
+              "py": 150.2
+            }
+          ]
+        },
+        {
+          "fixture": "ms-continuation-long-valid",
+          "case": "57|LONG",
+          "diffs": [
+            {
+              "field": "stop",
+              "ts": 126.6,
+              "py": 121.6
+            },
+            {
+              "field": "t1",
+              "ts": 139.8,
+              "py": 149.8
+            },
+            {
+              "field": "t2",
+              "ts": 144.20000000000002,
+              "py": 159.2
+            }
+          ]
+        },
+        {
+          "fixture": "ms-continuation-long-valid",
+          "case": "58|LONG",
+          "diffs": [
+            {
+              "field": "stop",
+              "ts": 126.6,
+              "py": 122.6
+            },
+            {
+              "field": "t1",
+              "ts": 142.8,
+              "py": 150.8
+            },
+            {
+              "field": "t2",
+              "ts": 148.20000000000002,
+              "py": 160.2
+            }
+          ]
+        },
+        {
+          "fixture": "ms-continuation-long-valid",
+          "case": "59|LONG",
+          "diffs": [
+            {
+              "field": "stop",
+              "ts": 125.348408237451,
+              "py": 122.6
+            },
+            {
+              "field": "t1",
+              "ts": 136.303183525098,
+              "py": 141.8
+            },
+            {
+              "field": "t2",
+              "ts": 139.954775287647,
+              "py": 148.2
+            }
+          ]
+        },
+        {
+          "fixture": "ms-continuation-long-valid",
+          "case": "60|LONG",
+          "diffs": [
+            {
+              "field": "stop",
+              "ts": 126.45923622049021,
+              "py": 122.6
+            },
+            {
+              "field": "t1",
+              "ts": 137.08152755901958,
+              "py": 144.8
+            },
+            {
+              "field": "t2",
+              "ts": 140.62229133852935,
+              "py": 152.2
+            }
+          ]
+        },
+        {
+          "fixture": "ms-continuation-long-valid",
+          "case": "61|LONG",
+          "diffs": [
+            {
+              "field": "stop",
+              "ts": 128.6,
+              "py": 123.6
+            },
+            {
+              "field": "t1",
+              "ts": 141.8,
+              "py": 151.8
+            },
+            {
+              "field": "t2",
+              "ts": 146.20000000000002,
+              "py": 161.2
+            }
+          ]
+        },
+        {
+          "fixture": "ms-continuation-long-valid",
+          "case": "62|LONG",
+          "diffs": [
+            {
+              "field": "stop",
+              "ts": 128.6,
+              "py": 124.6
+            },
+            {
+              "field": "t1",
+              "ts": 144.8,
+              "py": 152.8
+            },
+            {
+              "field": "t2",
+              "ts": 150.20000000000002,
+              "py": 162.2
+            }
+          ]
+        },
+        {
+          "fixture": "ms-continuation-long-valid",
+          "case": "63|LONG",
+          "diffs": [
+            {
+              "field": "stop",
+              "ts": 127.34739139082252,
+              "py": 124.6
+            },
+            {
+              "field": "t1",
+              "ts": 138.30521721835495,
+              "py": 143.8
+            },
+            {
+              "field": "t2",
+              "ts": 141.95782582753242,
+              "py": 150.2
+            }
+          ]
+        },
+        {
+          "fixture": "ms-continuation-long-valid",
+          "case": "64|LONG",
+          "issue": "missing_in_py"
+        },
+        {
+          "fixture": "ms-continuation-long-valid",
+          "case": "50|LONG",
+          "issue": "missing_in_ts"
+        }
+      ]
+    },
+    "trend-reversal-momentum": {
+      "fixtures": 2,
+      "comparisons": 1,
+      "matches": 0,
+      "material_differences": 1,
+      "status": "BLOCKED",
+      "notes": [
+        {
+          "fixture": "reversal-long-valid",
+          "case": "65|LONG",
+          "issue": "missing_in_py"
+        }
+      ]
+    },
+    "support-resistance-rejection": {
+      "fixtures": 2,
+      "comparisons": 1,
+      "matches": 0,
+      "material_differences": 1,
+      "status": "BLOCKED",
+      "notes": [
+        {
+          "fixture": "sr-rejection-long-valid",
+          "case": "80|LONG",
+          "issue": "missing_in_py"
+        }
+      ]
+    },
+    "volatility-expansion-breakout": {
+      "fixtures": 2,
+      "comparisons": 1,
+      "matches": 0,
+      "material_differences": 1,
+      "status": "BLOCKED",
+      "notes": [
+        {
+          "fixture": "vol-expansion-long-valid",
+          "case": "80|LONG",
+          "issue": "missing_in_py"
+        }
+      ]
+    }
+  },
+  "summary": {
+    "totalStrategies": 6,
+    "parity": 1,
+    "blocked": 5
+  }
+}

@@ -4,7 +4,7 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, model_validator
 from .backtest import Bar, Setup, breakdowns, simulate, summarize, chronological_split, walk_forward
-from .models import CostModel
+from .models import CostModel, COST_MODEL_VERSION
 from .strategies import generate_setups
 
 app = FastAPI(title="Signal Engine Research API", version="0.1.0")
@@ -50,10 +50,10 @@ class SetupInput(BaseModel):
         return self
 
 class CostsInput(BaseModel):
-    fee_bps_per_side: Decimal = Field(default=Decimal("5"), ge=0)
-    spread_bps: Decimal = Field(default=Decimal("2"), ge=0)
-    slippage_bps: Decimal = Field(default=Decimal("2"), ge=0)
-    funding_bps_per_8h: Decimal = Decimal("0")
+    fee_bps_per_side: Decimal = Field(ge=0)
+    spread_bps: Decimal = Field(ge=0)
+    slippage_bps: Decimal = Field(ge=0)
+    funding_bps_per_8h: Decimal = Field(default=Decimal("0"), ge=0)
 
 class BacktestInput(BaseModel):
     strategy_key: str
@@ -67,7 +67,7 @@ class BacktestInput(BaseModel):
     bars: list[BarInput]
     trend_bars: list[BarInput] = Field(default_factory=list)
     setups: list[SetupInput] | None = None
-    costs: CostsInput = Field(default_factory=CostsInput)
+    costs: CostsInput
 
 @app.get("/health")
 def health():
@@ -113,26 +113,50 @@ def run_backtest(payload: BacktestInput):
         evaluation_times={b.timestamp for b in evaluation_bars}
         setups=[s for s in setups if s.signal_time in evaluation_times]
         costs = CostModel(**payload.costs.model_dump())
+        zero_costs = CostModel(fee_bps_per_side=Decimal("0"), spread_bps=Decimal("0"), slippage_bps=Decimal("0"), funding_bps_per_8h=Decimal("0"))
         train, validation, out_of_sample = chronological_split(evaluation_bars)
-        def run_segment(segment):
+        def segment_metrics(segment, model):
             timestamps = {bar.timestamp for bar in segment}
             selected = [setup for setup in setups if setup.signal_time in timestamps]
-            return summarize(simulate(segment, selected, costs))
-        trades = simulate(evaluation_bars, setups, costs)
+            trades = simulate(segment, selected, model)
+            return summarize(trades), trades
+        gross_overall, _ = segment_metrics(evaluation_bars, zero_costs)
+        net_overall, net_trades = segment_metrics(evaluation_bars, costs)
+        def run_segment(segment):
+            _, g = segment_metrics(segment, zero_costs)
+            s, n = segment_metrics(segment, costs)
+            return {"gross": summarize(g), "net": s}
+        gross_train, _ = segment_metrics(train, zero_costs); net_train, _ = segment_metrics(train, costs)
+        gross_val, _ = segment_metrics(validation, zero_costs); net_val, _ = segment_metrics(validation, costs)
+        gross_oos, _ = segment_metrics(out_of_sample, zero_costs); net_oos, _ = segment_metrics(out_of_sample, costs)
+        assumptions = {
+            **payload.costs.model_dump(mode="json"),
+            "version": COST_MODEL_VERSION,
+            "explicit": True,
+            "market": "crypto_perpetual" if ("USDT" in payload.symbol or payload.symbol.endswith("USD")) and payload.symbol.replace("_","").isupper() and "_" not in payload.symbol else ("forex_or_metals" if "_" in payload.symbol or payload.symbol.endswith("USD") else "unknown"),
+        }
         return {
             "metrics": {
-                "overall": summarize(trades),
-                "train": run_segment(train),
-                "validation": run_segment(validation),
-                "outOfSample": run_segment(out_of_sample),
+                "overall": net_overall,
+                "overallGross": gross_overall,
+                "overallNet": net_overall,
+                "train": net_train,
+                "trainGross": gross_train,
+                "validation": net_val,
+                "validationGross": gross_val,
+                "outOfSample": net_oos,
+                "outOfSampleGross": gross_oos,
                 "outOfSampleBars": len(out_of_sample),
                 "evaluationBars": len(evaluation_bars),
-                "breakdowns": breakdowns(trades),
+                "breakdowns": breakdowns(net_trades),
+                "breakdownsGross": breakdowns(simulate(evaluation_bars, setups, zero_costs)),
+                "costModelVersion": COST_MODEL_VERSION,
             },
             "walkForward": walk_forward(evaluation_bars, setups, costs) if len(evaluation_bars) >= 40 else [],
-            "trades": [t.__dict__ for t in trades],
+            "walkForwardGross": walk_forward(evaluation_bars, setups, zero_costs) if len(evaluation_bars) >= 40 else [],
+            "trades": [t.__dict__ for t in net_trades],
             "generatedSetupCount": len(setups),
-            "assumptions": payload.costs.model_dump(mode="json"),
+            "assumptions": assumptions,
         }
     except (ValueError, ArithmeticError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

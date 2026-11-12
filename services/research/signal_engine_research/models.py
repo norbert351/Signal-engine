@@ -3,6 +3,9 @@ from decimal import Decimal
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+COST_MODEL_VERSION = "costs-v1"
+REQUIRED_COST_FIELDS = ("fee_bps_per_side", "spread_bps", "slippage_bps", "funding_bps_per_8h")
+
 class Candle(BaseModel):
  model_config = ConfigDict(frozen=True)
  symbol: str
@@ -22,9 +25,9 @@ class Candle(BaseModel):
   return self
 
 class CostModel(BaseModel):
- fee_bps_per_side: Decimal = Field(default=Decimal("5"), ge=0)
- spread_bps: Decimal = Field(default=Decimal("2"), ge=0)
- slippage_bps: Decimal = Field(default=Decimal("2"), ge=0)
+ fee_bps_per_side: Decimal = Field(ge=0)
+ spread_bps: Decimal = Field(ge=0)
+ slippage_bps: Decimal = Field(ge=0)
  funding_bps_per_8h: Decimal = Field(default=Decimal("0"))
 
 class BacktestRequest(BaseModel):
@@ -34,5 +37,5 @@ class BacktestRequest(BaseModel):
  timeframe: str
  start: datetime
  end: datetime
- costs: CostModel = CostModel()
+ costs: CostModel
  direction: Literal["long", "short", "both"] = "both"

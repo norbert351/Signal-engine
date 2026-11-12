@@ -310,8 +310,9 @@ def generate_setups(
         htf_rsi_values = rsi_series([b.close for b in trend_bars], rsi_period)
     setups: list[Setup] = []
 
-    for i in range(max(slow, atr_period + 1, 2), len(bars) - 1):
+    for i in range(max(slow, atr_period + 1, 2), len(bars)):
         bar = bars[i]
+        if i < 1: continue
         previous = bars[i - 1]
         direction = lookup_trend(
             trend_times,
