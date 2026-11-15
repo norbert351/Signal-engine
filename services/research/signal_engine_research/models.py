@@ -28,7 +28,7 @@ class CostModel(BaseModel):
  fee_bps_per_side: Decimal = Field(ge=0)
  spread_bps: Decimal = Field(ge=0)
  slippage_bps: Decimal = Field(ge=0)
- funding_bps_per_8h: Decimal = Field(default=Decimal("0"))
+ funding_bps_per_8h: Decimal = Field(ge=0)
 
 class BacktestRequest(BaseModel):
  strategy_key: str

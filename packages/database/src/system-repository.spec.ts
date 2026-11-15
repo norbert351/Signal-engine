@@ -12,6 +12,7 @@ suite("database integration", () => {
   let schema: typeof import("./schema.js");
   let system: typeof import("./system-repository.js");
   let admin: typeof import("./admin-repository.js");
+  let backtests: typeof import("./backtest-repository.js");
   let ingestion: typeof import("./ingestion-repository.js");
   let sql: typeof import("./index.js").sql;
 
@@ -31,6 +32,7 @@ suite("database integration", () => {
     schema = await import("./schema.js");
     system = await import("./system-repository.js");
     admin = await import("./admin-repository.js");
+    backtests = await import("./backtest-repository.js");
     ingestion = await import("./ingestion-repository.js");
   }, 120_000);
 
@@ -110,7 +112,7 @@ suite("database integration", () => {
   it("blocks activation and approval until a sufficiently sampled backtest exists", async () => {
     const strategy = await admin.createStrategyVersion({ key: "approval-strategy", name: "Approval", parameters: {}, riskConfig: {} });
     await expect(admin.setStrategyEnabled(strategy!.id, true)).rejects.toThrow(/approved/);
-    const backtest = await admin.createBacktest({ strategyKey: strategy!.key, strategyVersion: strategy!.version, timeframe: "1h", dataset: { start: new Date().toISOString() }, assumptions: {} });
+    const backtest = await admin.createBacktest({ strategyKey: strategy!.key, strategyVersion: strategy!.version, timeframe: "1h", dataset: { start: new Date().toISOString() }, assumptions: { fee_bps_per_side: 5, spread_bps: 2, slippage_bps: 2, funding_bps_per_8h: 0 } });
     await db
       .update(schema.backtestRuns)
       .set({ status: "completed", completedAt: new Date(), metrics: { overall: { trades: 4 }, outOfSample: { trades: 1 }, outOfSampleBars: 10 } })
@@ -159,5 +161,70 @@ suite("database integration", () => {
     expect(reset?.status).toBe("requested");
     expect(reset?.cursorTime.getTime()).toBe(start.getTime());
   });
-});
 
+  it("claims queued backtests once and only finishes with the active claim token", async () => {
+    const strategy = await admin.createStrategyVersion({ key: "backtest-claim-strategy", name: "Backtest Claim", parameters: {}, riskConfig: {} });
+    const costs = { fee_bps_per_side: 5, spread_bps: 2, slippage_bps: 2, funding_bps_per_8h: 0 };
+    const queued = await admin.createBacktest({ strategyKey: strategy!.key, strategyVersion: strategy!.version, timeframe: "1h", dataset: { start: new Date().toISOString() }, assumptions: costs });
+    const first = await backtests.claimQueuedBacktests(50);
+    const job = first.find((item) => item.id === queued!.id);
+    expect(job?.status).toBe("running");
+    expect(job?.startedAt).toBeInstanceOf(Date);
+    expect((job?.metrics as { progress?: { stage?: string } })?.progress?.stage).toBe("running");
+    const duplicate = await backtests.claimQueuedBacktests(50);
+    expect(duplicate.find((item) => item.id === queued!.id)).toBeUndefined();
+
+    const secondQueued = await admin.createBacktest({ strategyKey: strategy!.key, strategyVersion: strategy!.version, timeframe: "1h", dataset: { start: new Date().toISOString() }, assumptions: costs });
+    const [workerA, workerB] = await Promise.all([backtests.claimQueuedBacktests(50), backtests.claimQueuedBacktests(50)]);
+    expect([...workerA, ...workerB].filter((item) => item.id === secondQueued!.id)).toHaveLength(1);
+    const secondJob = [...workerA, ...workerB].find((item) => item.id === secondQueued!.id);
+    expect(await backtests.finishBacktest(secondQueued!.id, { consumed: true }, "completed", costs, secondJob!.startedAt!)).toBe(true);
+
+    const wrongToken = new Date(job!.startedAt!.getTime() - 1);
+    expect(await backtests.updateBacktestProgress(queued!.id, { stage: "retry", attempts: 2 }, wrongToken)).toBe(false);
+    expect(await backtests.updateBacktestProgress(queued!.id, { stage: "retry", attempts: 2 }, job!.startedAt!)).toBe(true);
+    expect(await backtests.finishBacktest(queued!.id, { progress: { stage: "completed" } }, "completed", { ...costs, explicit: true, version: "costs-v1" }, wrongToken)).toBe(false);
+    let [stored] = await db.select().from(schema.backtestRuns).where(eq(schema.backtestRuns.id, queued!.id));
+    expect(stored?.status).toBe("running");
+
+    expect(await backtests.finishBacktest(queued!.id, { overall: { trades: 1 } }, "completed", { ...costs, explicit: true, version: "costs-v1" }, job!.startedAt!)).toBe(true);
+    [stored] = await db.select().from(schema.backtestRuns).where(eq(schema.backtestRuns.id, queued!.id));
+    expect(stored?.status).toBe("completed");
+    expect((stored?.assumptions as Record<string, unknown>).version).toBe("costs-v1");
+    const listed = (await admin.listBacktests()).find((item) => item.id === queued!.id);
+    expect(listed?.legacyCostDataUnverified).toBe(false);
+
+    expect(await backtests.finishBacktest(queued!.id, { overwritten: true }, "failed", undefined, job!.startedAt!)).toBe(false);
+    [stored] = await db.select().from(schema.backtestRuns).where(eq(schema.backtestRuns.id, queued!.id));
+    expect(stored?.status).toBe("completed");
+    expect(stored?.metrics).toEqual({ overall: { trades: 1 } });
+
+    await expect(admin.createBacktest({ strategyKey: strategy!.key, strategyVersion: strategy!.version, timeframe: "1h", dataset: { start: new Date().toISOString() }, assumptions: {} })).rejects.toThrow(/Explicit cost assumptions/);
+    const [legacy] = await db.insert(schema.backtestRuns).values({ strategyKey: strategy!.key, strategyVersion: strategy!.version, timeframe: "1h", dataset: { start: new Date().toISOString() }, assumptions: {}, parameters: {}, status: "completed", completedAt: new Date() }).returning();
+    const legacyListed = (await admin.listBacktests()).find((item) => item.id === legacy!.id);
+    expect(legacyListed?.legacyCostDataUnverified).toBe(true);
+  });
+
+  it("reclaims stale running backtests without letting the old worker finish them", async () => {
+    const strategy = await admin.createStrategyVersion({ key: "backtest-stale-strategy", name: "Backtest Stale", parameters: {}, riskConfig: {} });
+    const costs = { fee_bps_per_side: 5, spread_bps: 2, slippage_bps: 2, funding_bps_per_8h: 0 };
+    const queued = await admin.createBacktest({ strategyKey: strategy!.key, strategyVersion: strategy!.version, timeframe: "1h", dataset: { start: new Date().toISOString() }, assumptions: costs });
+    const first = (await backtests.claimQueuedBacktests(50)).find((item) => item.id === queued!.id);
+    expect(first?.startedAt).toBeInstanceOf(Date);
+    await db.update(schema.backtestRuns).set({ startedAt: new Date(Date.now() - 31 * 60_000) }).where(eq(schema.backtestRuns.id, queued!.id));
+    const reclaimed = (await backtests.claimQueuedBacktests(50)).find((item) => item.id === queued!.id);
+    expect(reclaimed?.status).toBe("running");
+    expect(reclaimed!.startedAt!.getTime()).toBeGreaterThan(first!.startedAt!.getTime());
+    expect((reclaimed?.metrics as { progress?: { stage?: string; reclaimed?: boolean } })?.progress).toMatchObject({ stage: "reclaimed", reclaimed: true });
+
+    expect(await backtests.updateBacktestProgress(queued!.id, { stage: "retry" }, first!.startedAt!)).toBe(false);
+    expect(await backtests.finishBacktest(queued!.id, { worker: "old" }, "completed", costs, first!.startedAt!)).toBe(false);
+    let [stored] = await db.select().from(schema.backtestRuns).where(eq(schema.backtestRuns.id, queued!.id));
+    expect(stored?.status).toBe("running");
+
+    expect(await backtests.finishBacktest(queued!.id, { worker: "new" }, "completed", costs, reclaimed!.startedAt!)).toBe(true);
+    [stored] = await db.select().from(schema.backtestRuns).where(eq(schema.backtestRuns.id, queued!.id));
+    expect(stored?.status).toBe("completed");
+    expect(stored?.metrics).toEqual({ worker: "new" });
+  });
+});

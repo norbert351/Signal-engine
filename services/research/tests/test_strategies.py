@@ -58,3 +58,63 @@ def test_new_strategy_parameter_validation():
         pass
     else:
         raise AssertionError("Expected invalid breakout parameters to fail")
+
+
+def test_each_parity_fixture_is_no_lookahead_and_ignores_incomplete_bars():
+    import json
+    from dataclasses import replace
+    from pathlib import Path
+
+    from signal_engine_research.strategies import evaluate_at
+
+    fixtures = Path(__file__).resolve().parents[3] / "tests" / "parity" / "fixtures"
+
+    def parse(item):
+        timestamp = int(item["t"])
+        return Bar(
+            timestamp,
+            Decimal(str(item["o"])),
+            Decimal(str(item["h"])),
+            Decimal(str(item["l"])),
+            Decimal(str(item["c"])),
+            int(item.get("ct", timestamp + 1)),
+            Decimal(str(item.get("v", 0))),
+            item.get("complete", True),
+        )
+
+    tested = 0
+    for path in sorted(fixtures.glob("*-long-valid.json")):
+        fixture = json.loads(path.read_text())
+        entry = [parse(item) for item in fixture["entryBars"]]
+        trend = [parse(item) for item in fixture["trendBars"]]
+        params = fixture.get("params") or {}
+        signal = None
+        for index in range(len(entry)):
+            signal = evaluate_at(fixture["strategyKey"], entry[: index + 1], trend, params, "1h")
+            if signal is not None:
+                break
+        assert signal is not None, fixture["name"]
+        assert signal.trigger_close_time == entry[index].close_timestamp
+        base = evaluate_at(fixture["strategyKey"], entry[: index + 1], trend, params, "1h")
+        future_trend = trend + [
+            replace(trend[-1], timestamp=trend[-1].timestamp + 10_000_000, close_timestamp=trend[-1].close_timestamp + 10_000_000)
+        ]
+        assert evaluate_at(fixture["strategyKey"], entry[: index + 1], future_trend, params, "1h") == base
+        next_bar = replace(
+            entry[-1],
+            timestamp=entry[-1].timestamp + 3_600_000,
+            close_timestamp=entry[-1].close_timestamp + 3_600_000,
+        )
+        setups = generate_setups(fixture["strategyKey"], entry + [next_bar], trend, params, timeframe="1h")
+        assert setups, fixture["name"]
+        assert all(setup.risk_fraction == Decimal("0.01") for setup in setups)
+        assert all(setup.target2 is not None for setup in setups)
+        incomplete = replace(
+            entry[index],
+            timestamp=entry[index].timestamp + 3_600_000,
+            close_timestamp=entry[index].close_timestamp + 3_600_000,
+            complete=False,
+        )
+        assert evaluate_at(fixture["strategyKey"], entry[: index + 1] + [incomplete], trend, params, "1h") == base
+        tested += 1
+    assert tested == 6

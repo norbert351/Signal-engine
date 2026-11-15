@@ -123,8 +123,19 @@ export async function setStrategyApproval(id: string, approved: boolean, note: s
   return row ?? null;
 }
 
+const REQUIRED_COST_FIELDS = ["fee_bps_per_side", "spread_bps", "slippage_bps", "funding_bps_per_8h"] as const;
+
+function hasExplicitCosts(assumptions: Record<string, unknown> | null | undefined): boolean {
+  if (!assumptions || typeof assumptions !== "object") return false;
+  return REQUIRED_COST_FIELDS.every((key) => {
+    const value = assumptions[key];
+    const numeric = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+    return Number.isFinite(numeric) && numeric >= 0;
+  });
+}
+
 export async function listBacktests() {
-  return db
+  const rows = await db
     .select({
       id: backtestRuns.id,
       strategyKey: backtestRuns.strategyKey,
@@ -143,6 +154,7 @@ export async function listBacktests() {
     .from(backtestRuns)
     .orderBy(desc(backtestRuns.createdAt))
     .limit(100);
+  return rows.map((row) => ({ ...row, legacyCostDataUnverified: !hasExplicitCosts(row.assumptions) }));
 }
 
 export async function createBacktest(input: {
@@ -153,6 +165,7 @@ export async function createBacktest(input: {
   assumptions: Record<string, unknown>;
   instrumentId?: string;
 }) {
+  if (!hasExplicitCosts(input.assumptions)) throw new Error("Explicit cost assumptions are required");
   const [strategy] = await db
     .select()
     .from(strategyConfigs)

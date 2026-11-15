@@ -11,4 +11,4 @@ def test_incomplete_candles_are_excluded():
  assert len(completed_candles([candle(0), candle(5, False)])) == 1
 
 def test_cost_model_reduces_positive_return():
- assert net_return(Decimal("0.01"), CostModel(fee_bps_per_side=Decimal("5"),spread_bps=Decimal("2"),slippage_bps=Decimal("2")), Decimal("8")) < Decimal("0.01")
+ assert net_return(Decimal("0.01"), CostModel(fee_bps_per_side=Decimal("5"),spread_bps=Decimal("2"),slippage_bps=Decimal("2"),funding_bps_per_8h=Decimal("0")), Decimal("8")) < Decimal("0.01")

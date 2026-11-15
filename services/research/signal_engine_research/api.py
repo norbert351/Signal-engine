@@ -17,6 +17,7 @@ class BarInput(BaseModel):
     low: Decimal
     close: Decimal
     volume: Decimal = Decimal("0")
+    complete: bool = True
     @model_validator(mode="after")
     def validate_ohlc(self):
         if self.close_timestamp<=self.timestamp:
@@ -53,7 +54,7 @@ class CostsInput(BaseModel):
     fee_bps_per_side: Decimal = Field(ge=0)
     spread_bps: Decimal = Field(ge=0)
     slippage_bps: Decimal = Field(ge=0)
-    funding_bps_per_8h: Decimal = Field(default=Decimal("0"), ge=0)
+    funding_bps_per_8h: Decimal = Field(ge=0)
 
 class BacktestInput(BaseModel):
     strategy_key: str

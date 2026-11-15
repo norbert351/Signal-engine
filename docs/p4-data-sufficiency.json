@@ -614,14 +614,14 @@
     "enabled": true,
     "available": true,
     "timeframe": "1h",
-    "bars": 13447,
-    "span_days": 560.2917,
-    "latest_complete_close": "2026-11-12T06:59:59.999+00:00",
-    "latest_age_hours": 0.2,
+    "bars": 13515,
+    "span_days": 563.125,
+    "latest_complete_close": "2026-11-15T02:59:59.999+00:00",
+    "latest_age_hours": 0.6,
     "sessionNote": "24/7 crypto; funding applicable",
-    "usable_history_note": "usable <= stored complete candles minus gaps/session closures and filtered by closed-candle/freshness rules",
+    "usable_history_note": "usable <= stored complete candles minus gaps/session closures and filtered by closed-candle/freshness rules; refreshed 2026-11-15 read-only (13,515/13,515 complete bars, 0 missing hourly bars)",
     "validation_sufficiency": "yes (primary evidence only)",
-    "reason": "deep history (~560d) used in prior runs; cannot generalize beyond BTCUSDT"
+    "reason": "deep contiguous history (~563d, refreshed 2026-11-15) used in prior runs; cannot generalize beyond BTCUSDT"
   },
   {
     "provider": "binance_usdm",

@@ -7,8 +7,9 @@ function assertExplicitCosts(value: unknown): Record<string, unknown> {
   const costs=value as Record<string,unknown>;
   for(const key of REQUIRED_COST_FIELDS){
     const v=costs[key];
-    if(v===null||v===undefined||v===""||!Number.isFinite(Number(v))) throw new BadRequestException(`Missing or invalid cost assumption: ${key}`);
-    if(Number(v)<0) throw new BadRequestException(`Cost assumption must be non-negative: ${key}`);
+    const numeric=typeof v==="number"?v:typeof v==="string"&&v.trim()!==""?Number(v):Number.NaN;
+    if(!Number.isFinite(numeric)) throw new BadRequestException(`Missing or invalid cost assumption: ${key}`);
+    if(numeric<0) throw new BadRequestException(`Cost assumption must be non-negative: ${key}`);
   }
   return costs;
 }

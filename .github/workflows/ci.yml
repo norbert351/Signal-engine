@@ -58,3 +58,26 @@ jobs:
         working-directory: services/research
       - run: python -m pytest -q
         working-directory: services/research
+  parity-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @signal-engine/core build
+      - run: pip install -e ".[dev]"
+        working-directory: services/research
+      - run: node tests/parity/run-ts.mjs > "$RUNNER_TEMP/parity-ts.json"
+      - run: python tests/parity/run-py.py > "$RUNNER_TEMP/parity-py.json"
+        env:
+          PYTHONPATH: services/research
+      - run: node tests/parity/compare.mjs "$RUNNER_TEMP/parity-ts.json" "$RUNNER_TEMP/parity-py.json"

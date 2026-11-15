@@ -3,7 +3,7 @@ import { findEnabledStrategies, findInstrument, publishSignal, readRecentCandles
 import { openSignalConflicts } from "@signal-engine/database/system-repository";
 import { formatSignalMessage } from "./format.js";
 
-type CandleRow = { openTime: Date; closeTime: Date; open: string; high: string; low: string; close: string; isComplete: boolean };
+type CandleRow = { openTime: Date; closeTime: Date; open: string; high: string; low: string; close: string; volume: string | null; isComplete: boolean };
 const toCore = (rows: CandleRow[]): Candle[] =>
   rows.map((row) => ({
     openTime: row.openTime.getTime(),
@@ -12,6 +12,7 @@ const toCore = (rows: CandleRow[]): Candle[] =>
     high: Number(row.high),
     low: Number(row.low),
     close: Number(row.close),
+    ...(row.volume === null ? {} : { volume: Number(row.volume) }),
     complete: row.isComplete
   }));
 

@@ -1,6 +1,6 @@
 # P4 Historical Data Sufficiency Matrix
 
-Generated: 2026-11-12 (read-only DB snapshot). No additional Twelve Data credits consumed. 25 instruments x 6 timeframes = 150 series assessed.
+Generated: 2026-11-12 (read-only DB snapshot). BTCUSDT:1h refreshed 2026-11-15 from current DB. No additional Twelve Data credits consumed. 25 instruments x 6 timeframes = 150 series assessed.
 
 ## Genuinely usable history adjustments
 - **Available history:** stored complete candle count/span in `market_candles` (all rows `is_complete=true` for stored sets).
@@ -51,7 +51,7 @@ Generated: 2026-11-12 (read-only DB snapshot). No additional Twelve Data credits
 | binance_usdm | BTCUSDT | crypto_perpetual | Y/Y | 1m | 2099 | 1.4576 | 2026-11-12T07:09:59.999+00:00 | 0.03 | no | rolling/very short (2099 bars/1.4576d), latest age 0.0h; not for statistical validation; 24/7 crypto; funding applicable |
 | binance_usdm | BTCUSDT | crypto_perpetual | Y/Y | 5m | 659 | 2.2882 | 2026-11-12T07:09:59.999+00:00 | 0.03 | no | rolling/very short (659 bars/2.2882d), latest age 0.0h; not for statistical validation; 24/7 crypto; funding applicable |
 | binance_usdm | BTCUSDT | crypto_perpetual | Y/Y | 15m | 9251 | 103.2917 | 2026-11-12T06:59:59.999+00:00 | 0.2 | limited | ~103d but known 166.25h historical gap; cautious use only; 24/7 crypto; funding applicable |
-| binance_usdm | BTCUSDT | crypto_perpetual | Y/Y | 1h | 13447 | 560.2917 | 2026-11-12T06:59:59.999+00:00 | 0.2 | yes (primary evidence only) | deep history (~560d) used in prior runs; cannot generalize beyond BTCUSDT; 24/7 crypto; funding applicable |
+| binance_usdm | BTCUSDT | crypto_perpetual | Y/Y | 1h | 13515 | 563.125 | 2026-11-15T02:59:59.999+00:00 | 0.6 | yes (primary evidence only) | deep contiguous history (~563d, refreshed 2026-11-15; 0 missing hourly bars) used in prior runs; cannot generalize beyond BTCUSDT; 24/7 crypto; funding applicable |
 | binance_usdm | BTCUSDT | crypto_perpetual | Y/Y | 4h | 3361 | 560.1667 | 2026-11-12T03:59:59.999+00:00 | 3.2 | limited | 3361 bars over 560.1667d; exploratory only if trade frequency adequate; 24/7 crypto; funding applicable |
 | binance_usdm | BTCUSDT | crypto_perpetual | Y/Y | 1d | 300 | 300 | 2026-11-11T23:59:59.999+00:00 | 7.2 | limited | enough bars for some swing validation but regime/OOS trade-count uncertain; 24/7 crypto; funding applicable |
 | binance_usdm | DOGEUSDT | crypto_perpetual | Y/Y | 1m | 2099 | 1.4576 | 2026-11-12T07:09:59.999+00:00 | 0.03 | no | rolling/very short (2099 bars/1.4576d), latest age 0.0h; not for statistical validation; 24/7 crypto; funding applicable |
@@ -164,7 +164,7 @@ Generated: 2026-11-12 (read-only DB snapshot). No additional Twelve Data credits
 | twelve_data | XAU_USD | forex | Y/Y | 1d | 299 | 407 | 2026-11-11T23:59:59.999+00:00 | 7.2 | limited | enough bars for some swing validation but regime/OOS trade-count uncertain; forex sessions/weekend gaps; closed-candle/freshness filters apply |
 
 ## Summary
-- **Statistically sufficient now (per gate, with caveats):** BTCUSDT 1h only (deep ~560d; prior primary evidence). **Cannot claim broad market validation based on BTCUSDT alone.** BTCUSDT 15m limited by known gap; BTCUSDT 4h/1d limited/marginal for trade-count/regime confidence depending on strategy.
+- **Statistically sufficient now (per gate, with caveats):** BTCUSDT 1h only (deep ~563d, contiguous, refreshed 2026-11-15; prior primary evidence). **Cannot claim broad market validation based on BTCUSDT alone.** BTCUSDT 15m limited by known gap; BTCUSDT 4h/1d limited/marginal for trade-count/regime confidence depending on strategy.
 - **All other Binance symbols:** 1h ~13.7d/329 bars, 4h ~51d/306 bars, 15m ~4.4d/419 bars, 1m/5m rolling ~1.5-2.3d — **insufficient/no** for meaningful statistical validation (except 4h/1d marginal-limited exploratory at best, not gate-passing evidence).
 - **Twelve Data forex/XAU (all 5):** intraday history very shallow (1h ~12.7d, 15m ~3.4d, 5m ~1.3d, 1m ~0.46d) and 1m/5m/15m freshness budget-limited; 4h ~50d marginal; 1d ~299-407d limited for swing but intraday validation infeasible. **No instrument/TF combination provides sufficient forex intraday evidence.**
 - **More data needed (no extra Twelve Data credits):** accumulate Binance 1h/4h/15m history over time for non-BTC symbols; allow Twelve Data 4h/1h/1d to accumulate within existing credit-safe polling (do not increase credits/live tests); backfill only via already-approved mechanisms when available; treat 1m/5m forex as unavailable for validation under current plan.

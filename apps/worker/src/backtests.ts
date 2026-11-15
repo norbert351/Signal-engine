@@ -1,11 +1,36 @@
-import { claimQueuedBacktests, finishBacktest, loadBacktestCandles } from "@signal-engine/database/backtest-repository";
+import { claimQueuedBacktests, finishBacktest, loadBacktestCandles, updateBacktestProgress } from "@signal-engine/database/backtest-repository";
 import { errorText } from "./format.js";
 
 const EXPIRY_BARS: Record<string, number> = { "1m": 15, "5m": 6, "15m": 12, "1h": 12, "4h": 12, "1d": 6 };
 const TRADING_STYLE: Record<string, string> = { "1m": "scalping", "5m": "scalping", "15m": "intraday", "1h": "intraday", "4h": "swing", "1d": "swing" };
 const REQUIRED_COST_FIELDS = ["fee_bps_per_side", "spread_bps", "slippage_bps", "funding_bps_per_8h"] as const;
+const COST_MODEL_VERSION = "costs-v1";
 
-function validateExplicitCosts(assumptions: Record<string, unknown>): Record<string, number> {
+type BacktestServiceResult = {
+  metrics?: Record<string, unknown>;
+  assumptions?: Record<string, unknown>;
+  detail?: string;
+  attempts: number;
+};
+type RetryHandler = (attempt: number, error: unknown) => Promise<void> | void;
+
+function markAttempts(error: unknown, attempts: number): Error {
+  const wrapped = error instanceof Error ? error : new Error(String(error));
+  const current = (wrapped as Error & { attempts?: number }).attempts;
+  if (!Number.isInteger(current) || current! < attempts) (wrapped as Error & { attempts?: number }).attempts = attempts;
+  return wrapped;
+}
+
+function retryNotice(handler: RetryHandler | undefined, attempt: number, error: unknown) {
+  return Promise.resolve(handler?.(attempt, error)).catch(() => undefined);
+}
+
+export function failureAttempts(error: unknown): number {
+  const value = (error as { attempts?: unknown } | null)?.attempts;
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : 1;
+}
+
+export function validateExplicitCosts(assumptions: Record<string, unknown>): Record<string, number> {
   const out: Record<string, number> = {};
   for (const key of REQUIRED_COST_FIELDS) {
     const value = assumptions[key];
@@ -16,18 +41,51 @@ function validateExplicitCosts(assumptions: Record<string, unknown>): Record<str
   return out;
 }
 
-function classifyFailure(error: unknown): { message: string; classification: string; transient: boolean } {
+export function validateEffectiveAssumptions(
+  result: Pick<BacktestServiceResult, "assumptions">,
+  costs: Record<string, number>
+): Record<string, unknown> {
+  if (!result.assumptions) return { ...costs, explicit: true, version: COST_MODEL_VERSION };
+  const returned = validateExplicitCosts(result.assumptions);
+  for (const key of REQUIRED_COST_FIELDS) {
+    if (returned[key] !== costs[key]) throw new Error(`Research service changed cost assumption: ${key}`);
+  }
+  if (result.assumptions.version !== COST_MODEL_VERSION || result.assumptions.explicit !== true) {
+    throw new Error("Research service did not return verified explicit cost assumptions");
+  }
+  return { ...result.assumptions, ...costs, explicit: true, version: COST_MODEL_VERSION };
+}
+
+export function classifyFailure(error: unknown): { message: string; classification: string; transient: boolean } {
   const message = errorText(error, "Backtest failed");
   const lower = message.toLowerCase();
-  const transient = ["timeout", "aborted", "econnrefused", "econnreset", "headers timeout", "fetch failed", "socket hang up", "network", "503", "502", "429"].some((p) => lower.includes(p));
   let classification = "invalid_request_or_data";
-  if (transient) classification = "transient_infrastructure";
-  else if (lower.includes("insufficient historical candles") || lower.includes("unable to load") || lower.includes("no bar") || lower.includes("ohlc") || lower.includes("not enough bars") || lower.includes("invalid")) classification = "data_or_validation";
-  else if (lower.includes("research service http 5")) classification = "research_service_error";
+  let transient = false;
+  if (/timeout|timed out|etimedout/.test(lower)) {
+    classification = "timeout";
+    transient = true;
+  } else if (/out of memory|enomem|heap|resource temporarily unavailable|too many open files|no space left|disk quota/.test(lower)) {
+    classification = "resource_error";
+    transient = true;
+  } else if (/database|postgres|deadlock|serialization failure|connection pool|sqlstate|relation .* does not exist/.test(lower)) {
+    classification = "database_error";
+  } else if (/research service http (5\d\d|429)|http (5\d\d|429)|bad gateway|service unavailable|gateway timeout/.test(lower)) {
+    classification = "research_service_error";
+    transient = true;
+  } else if (/econnrefused|econnreset|econnaborted|other side closed|headers timeout|fetch failed|socket hang up|network|aborted|abort/.test(lower)) {
+    classification = "transient_infrastructure";
+    transient = true;
+  } else if (/strategy|unsupported/.test(lower)) {
+    classification = "strategy_error";
+  } else if (/insufficient historical candles|unable to load|no bar|not enough bars|missing candle|empty dataset|no data/.test(lower)) {
+    classification = "data_error";
+  } else if (/ohlc|invalid|must be|malformed|duplicate candle|cost assumption/.test(lower)) {
+    classification = "validation_error";
+  }
   return { message, classification, transient };
 }
 
-async function postBacktest(base: string, body: unknown): Promise<{ metrics?: Record<string, unknown>; assumptions?: Record<string, unknown>; detail?: string }> {
+export async function postBacktest(base: string, body: unknown, onRetry?: RetryHandler): Promise<BacktestServiceResult> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
@@ -40,27 +98,35 @@ async function postBacktest(base: string, body: unknown): Promise<{ metrics?: Re
       const result = (await response.json().catch(() => ({}))) as { metrics?: Record<string, unknown>; assumptions?: Record<string, unknown>; detail?: string };
       if (!response.ok || !result.metrics) {
         const err = new Error(result.detail ?? `Research service HTTP ${response.status}`);
-        if (response.status >= 500 && attempt < 2) { lastError = err; await new Promise((r) => setTimeout(r, 1000)); continue; }
+        if (response.status >= 500 && attempt < 2) {
+          lastError = err;
+          await retryNotice(onRetry, attempt, err);
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
         throw err;
       }
-      return result;
+      return { ...result, attempts: attempt };
     } catch (error) {
       lastError = error;
       const { transient } = classifyFailure(error);
-      if (!transient || attempt >= 2) throw error;
-      await new Promise((r) => setTimeout(r, 1000));
+      if (!transient || attempt >= 2) throw markAttempts(error, attempt);
+      await retryNotice(onRetry, attempt, error);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   }
-  throw lastError ?? new Error("Backtest request failed");
+  throw markAttempts(lastError ?? new Error("Backtest request failed"), 2);
 }
 
 export async function processBacktests() {
   const jobs = await claimQueuedBacktests(3);
   let completed = 0;
   let failed = 0;
+  let stale = 0;
   const base = process.env.RESEARCH_SERVICE_URL ?? "http://localhost:8000";
 
   for (const job of jobs) {
+    const claimToken = job.startedAt ?? undefined;
     try {
       const dataset = job.dataset as {
         bars?: unknown[];
@@ -108,15 +174,36 @@ export async function processBacktests() {
         setups: dataset.setups ?? null,
         costs
       };
-      const result = await postBacktest(base, body);
-      const effectiveAssumptions = result.assumptions ?? { ...costs, explicit: true, version: "legacy-unspecified" };
-      await finishBacktest(job.id, { ...(result.metrics ?? {}), assumptions: effectiveAssumptions, progress: { stage: "completed", attempts: 1 } }, "completed", effectiveAssumptions);
-      completed += 1;
+      const onRetry: RetryHandler = async (attempt, error) => {
+        const classified = classifyFailure(error);
+        await updateBacktestProgress(
+          job.id,
+          {
+            stage: "retry",
+            attempts: attempt + 1,
+            lastAttempt: attempt,
+            classification: classified.classification,
+            retryScheduledAt: new Date().toISOString()
+          },
+          claimToken
+        );
+      };
+      const result = await postBacktest(base, body, onRetry);
+      const effectiveAssumptions = validateEffectiveAssumptions(result, costs);
+      const finished = await finishBacktest(
+        job.id,
+        { ...(result.metrics ?? {}), assumptions: effectiveAssumptions, progress: { stage: "completed", attempts: result.attempts } },
+        "completed",
+        effectiveAssumptions,
+        claimToken
+      );
+      if (finished) completed += 1;
+      else stale += 1;
     } catch (error) {
       const classified = classifyFailure(error);
       const jobAssumptions = (job.assumptions ?? {}) as Record<string, unknown>;
       const legacy = Object.keys(jobAssumptions).length === 0;
-      await finishBacktest(
+      const finished = await finishBacktest(
         job.id,
         {
           error: classified.message,
@@ -124,13 +211,15 @@ export async function processBacktests() {
           transient: classified.transient,
           failedAt: new Date().toISOString(),
           legacyCostDataUnverified: legacy,
-          progress: { stage: "failed" }
+          progress: { stage: "failed", attempts: failureAttempts(error) }
         },
         "failed",
-        legacy ? { legacyCostDataUnverified: true } : jobAssumptions
+        legacy ? { legacyCostDataUnverified: true } : jobAssumptions,
+        claimToken
       );
-      failed += 1;
+      if (finished) failed += 1;
+      else stale += 1;
     }
   }
-  return { claimed: jobs.length, completed, failed };
+  return { claimed: jobs.length, completed, failed, stale };
 }

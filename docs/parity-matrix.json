@@ -1,365 +1,1147 @@
 {
+  "version": 3,
+  "tolerance": 1e-8,
+  "comparedFields": [
+    "fixture identity and category",
+    "evaluation count",
+    "signal presence and index",
+    "strategyKey",
+    "strategyVersion",
+    "triggerCloseTime",
+    "timeframe",
+    "direction",
+    "entry",
+    "stop",
+    "targets",
+    "rr",
+    "score",
+    "scoreFactors",
+    "rationale",
+    "invalidation",
+    "evidence"
+  ],
+  "knownIntentionalDifferences": [
+    "Exception message wording for rejected parameters is not compared; both implementations rejecting the same evaluation is treated as a match.",
+    "Rationale and invalidation text is compared exactly for emitted signals."
+  ],
+  "remainingLimitations": [
+    "Fixtures are deterministic synthetic market sequences, not independent market samples.",
+    "Parity proves implementation agreement, not profitability, statistical significance, or data sufficiency.",
+    "Only 1h fixtures are exercised by this harness.",
+    "The Python runner executes the source tree; its fixture and strategy revision must match the TypeScript build."
+  ],
   "strategies": {
-    "range-breakout-retest": {
-      "fixtures": 2,
-      "comparisons": 1,
-      "matches": 0,
-      "material_differences": 1,
-      "status": "BLOCKED",
-      "notes": [
+    "ema-trend-pullback": {
+      "status": "PARITY_OK",
+      "tolerance": 1e-8,
+      "comparedFields": [
+        "fixture identity and category",
+        "evaluation count",
+        "signal presence and index",
+        "strategyKey",
+        "strategyVersion",
+        "triggerCloseTime",
+        "timeframe",
+        "direction",
+        "entry",
+        "stop",
+        "targets",
+        "rr",
+        "score",
+        "scoreFactors",
+        "rationale",
+        "invalidation",
+        "evidence"
+      ],
+      "knownIntentionalDifferences": [
+        "Exception message wording for rejected parameters is not compared; both implementations rejecting the same evaluation is treated as a match.",
+        "Rationale and invalidation text is compared exactly for emitted signals."
+      ],
+      "remainingLimitations": [
+        "Fixtures are deterministic synthetic market sequences, not independent market samples.",
+        "Parity proves implementation agreement, not profitability, statistical significance, or data sufficiency.",
+        "Only 1h fixtures are exercised by this harness.",
+        "The Python runner executes the source tree; its fixture and strategy revision must match the TypeScript build."
+      ],
+      "coverage": {
+        "fixtures": 17,
+        "positiveFixtures": 8,
+        "negativeFixtures": 4,
+        "edgeFixtures": 5,
+        "positiveSignals": 8,
+        "negativeSignals": 0,
+        "edgeSignals": 2,
+        "positiveDirections": [
+          "LONG",
+          "SHORT"
+        ],
+        "issues": []
+      },
+      "evaluations": 2361,
+      "comparisons": 2361,
+      "signals": 10,
+      "matches": 2361,
+      "materialDifferences": 0,
+      "notes": [],
+      "fixtures": [
         {
-          "fixture": "breakout-retest-long-valid",
-          "case": "61|LONG",
-          "issue": "missing_in_py"
+          "fixture": "ema-pullback-conflicting-htf",
+          "file": "ema-pullback-conflicting-htf.json",
+          "category": "edge",
+          "evaluations": 140,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "ema-pullback-flat-invalid",
+          "file": "ema-pullback-flat-invalid.json",
+          "category": "negative",
+          "evaluations": 140,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "ema-pullback-incomplete-final",
+          "file": "ema-pullback-incomplete-final.json",
+          "category": "edge",
+          "evaluations": 141,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "ema-pullback-insufficient-htf",
+          "file": "ema-pullback-insufficient-htf.json",
+          "category": "edge",
+          "evaluations": 140,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "ema-pullback-invalid-params",
+          "file": "ema-pullback-invalid-params.json",
+          "category": "edge",
+          "evaluations": 140,
+          "signals": 0,
+          "errors": 140
+        },
+        {
+          "fixture": "ema-pullback-long-borderline",
+          "file": "ema-pullback-long-borderline.json",
+          "category": "negative",
+          "evaluations": 140,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "ema-pullback-long-valid",
+          "file": "ema-pullback-long-valid.json",
+          "category": "positive",
+          "evaluations": 140,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "ema-pullback-long-variant-jitter",
+          "file": "ema-pullback-long-variant-jitter.json",
+          "category": "positive",
+          "evaluations": 140,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "ema-pullback-long-variant-params",
+          "file": "ema-pullback-long-variant-params.json",
+          "category": "positive",
+          "evaluations": 140,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "ema-pullback-long-variant-scale",
+          "file": "ema-pullback-long-variant-scale.json",
+          "category": "positive",
+          "evaluations": 140,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "ema-pullback-no-setup",
+          "file": "ema-pullback-no-setup.json",
+          "category": "negative",
+          "evaluations": 120,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "ema-pullback-short-borderline",
+          "file": "ema-pullback-short-borderline.json",
+          "category": "negative",
+          "evaluations": 140,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "ema-pullback-short-valid",
+          "file": "ema-pullback-short-valid.json",
+          "category": "positive",
+          "evaluations": 140,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "ema-pullback-short-variant-jitter",
+          "file": "ema-pullback-short-variant-jitter.json",
+          "category": "positive",
+          "evaluations": 140,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "ema-pullback-short-variant-params",
+          "file": "ema-pullback-short-variant-params.json",
+          "category": "positive",
+          "evaluations": 140,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "ema-pullback-short-variant-scale",
+          "file": "ema-pullback-short-variant-scale.json",
+          "category": "positive",
+          "evaluations": 140,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "ema-pullback-tight-targets",
+          "file": "ema-pullback-tight-targets.json",
+          "category": "edge",
+          "evaluations": 140,
+          "signals": 1,
+          "errors": 0
         }
       ]
-    },
-    "ema-trend-pullback": {
-      "fixtures": 4,
-      "comparisons": 2,
-      "matches": 2,
-      "material_differences": 0,
-      "status": "PARITY_OK",
-      "notes": []
     },
     "market-structure-continuation": {
-      "fixtures": 2,
-      "comparisons": 15,
-      "matches": 0,
-      "material_differences": 15,
-      "status": "BLOCKED",
-      "notes": [
+      "status": "PARITY_OK",
+      "tolerance": 1e-8,
+      "comparedFields": [
+        "fixture identity and category",
+        "evaluation count",
+        "signal presence and index",
+        "strategyKey",
+        "strategyVersion",
+        "triggerCloseTime",
+        "timeframe",
+        "direction",
+        "entry",
+        "stop",
+        "targets",
+        "rr",
+        "score",
+        "scoreFactors",
+        "rationale",
+        "invalidation",
+        "evidence"
+      ],
+      "knownIntentionalDifferences": [
+        "Exception message wording for rejected parameters is not compared; both implementations rejecting the same evaluation is treated as a match.",
+        "Rationale and invalidation text is compared exactly for emitted signals."
+      ],
+      "remainingLimitations": [
+        "Fixtures are deterministic synthetic market sequences, not independent market samples.",
+        "Parity proves implementation agreement, not profitability, statistical significance, or data sufficiency.",
+        "Only 1h fixtures are exercised by this harness.",
+        "The Python runner executes the source tree; its fixture and strategy revision must match the TypeScript build."
+      ],
+      "coverage": {
+        "fixtures": 14,
+        "positiveFixtures": 8,
+        "negativeFixtures": 1,
+        "edgeFixtures": 5,
+        "positiveSignals": 110,
+        "negativeSignals": 0,
+        "edgeSignals": 24,
+        "positiveDirections": [
+          "LONG",
+          "SHORT"
+        ],
+        "issues": []
+      },
+      "evaluations": 966,
+      "comparisons": 966,
+      "signals": 134,
+      "matches": 966,
+      "materialDifferences": 0,
+      "notes": [],
+      "fixtures": [
         {
-          "fixture": "ms-continuation-long-valid",
-          "case": "51|LONG",
-          "diffs": [
-            {
-              "field": "stop",
-              "ts": 121.35161558828975,
-              "py": 118.6
-            },
-            {
-              "field": "t1",
-              "ts": 132.2967688234205,
-              "py": 137.8
-            },
-            {
-              "field": "t2",
-              "ts": 135.94515323513076,
-              "py": 144.2
-            }
-          ]
+          "fixture": "ms-continuation-conflicting-htf",
+          "file": "ms-continuation-conflicting-htf.json",
+          "category": "edge",
+          "evaluations": 65,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "ms-continuation-incomplete-final",
+          "file": "ms-continuation-incomplete-final.json",
+          "category": "edge",
+          "evaluations": 66,
+          "signals": 15,
+          "errors": 0
+        },
+        {
+          "fixture": "ms-continuation-insufficient-htf",
+          "file": "ms-continuation-insufficient-htf.json",
+          "category": "edge",
+          "evaluations": 65,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "ms-continuation-invalid-params",
+          "file": "ms-continuation-invalid-params.json",
+          "category": "edge",
+          "evaluations": 65,
+          "signals": 0,
+          "errors": 65
         },
         {
           "fixture": "ms-continuation-long-valid",
-          "case": "52|LONG",
-          "diffs": [
-            {
-              "field": "stop",
-              "ts": 122.46221447484048,
-              "py": 118.6
-            },
-            {
-              "field": "t1",
-              "ts": 133.07557105031904,
-              "py": 140.8
-            },
-            {
-              "field": "t2",
-              "ts": 136.61335657547858,
-              "py": 148.2
-            }
-          ]
+          "file": "ms-continuation-long-valid.json",
+          "category": "positive",
+          "evaluations": 65,
+          "signals": 14,
+          "errors": 0
         },
         {
-          "fixture": "ms-continuation-long-valid",
-          "case": "53|LONG",
-          "diffs": [
-            {
-              "field": "stop",
-              "ts": 124.6,
-              "py": 119.6
-            },
-            {
-              "field": "t1",
-              "ts": 137.8,
-              "py": 147.8
-            },
-            {
-              "field": "t2",
-              "ts": 142.20000000000002,
-              "py": 157.2
-            }
-          ]
+          "fixture": "ms-continuation-long-variant-jitter",
+          "file": "ms-continuation-long-variant-jitter.json",
+          "category": "positive",
+          "evaluations": 65,
+          "signals": 12,
+          "errors": 0
         },
         {
-          "fixture": "ms-continuation-long-valid",
-          "case": "54|LONG",
-          "diffs": [
-            {
-              "field": "stop",
-              "ts": 124.6,
-              "py": 120.6
-            },
-            {
-              "field": "t1",
-              "ts": 140.8,
-              "py": 148.8
-            },
-            {
-              "field": "t2",
-              "ts": 146.20000000000002,
-              "py": 158.2
-            }
-          ]
+          "fixture": "ms-continuation-long-variant-params",
+          "file": "ms-continuation-long-variant-params.json",
+          "category": "positive",
+          "evaluations": 65,
+          "signals": 14,
+          "errors": 0
         },
         {
-          "fixture": "ms-continuation-long-valid",
-          "case": "55|LONG",
-          "diffs": [
-            {
-              "field": "stop",
-              "ts": 123.34977594796813,
-              "py": 120.6
-            },
-            {
-              "field": "t1",
-              "ts": 134.30044810406375,
-              "py": 139.8
-            },
-            {
-              "field": "t2",
-              "ts": 137.9506721560956,
-              "py": 146.2
-            }
-          ]
+          "fixture": "ms-continuation-long-variant-scale",
+          "file": "ms-continuation-long-variant-scale.json",
+          "category": "positive",
+          "evaluations": 65,
+          "signals": 14,
+          "errors": 0
         },
         {
-          "fixture": "ms-continuation-long-valid",
-          "case": "56|LONG",
-          "diffs": [
-            {
-              "field": "stop",
-              "ts": 124.46050623739897,
-              "py": 120.6
-            },
-            {
-              "field": "t1",
-              "ts": 135.07898752520205,
-              "py": 142.8
-            },
-            {
-              "field": "t2",
-              "ts": 138.6184812878031,
-              "py": 150.2
-            }
-          ]
+          "fixture": "ms-continuation-no-setup",
+          "file": "ms-continuation-no-setup.json",
+          "category": "negative",
+          "evaluations": 120,
+          "signals": 0,
+          "errors": 0
         },
         {
-          "fixture": "ms-continuation-long-valid",
-          "case": "57|LONG",
-          "diffs": [
-            {
-              "field": "stop",
-              "ts": 126.6,
-              "py": 121.6
-            },
-            {
-              "field": "t1",
-              "ts": 139.8,
-              "py": 149.8
-            },
-            {
-              "field": "t2",
-              "ts": 144.20000000000002,
-              "py": 159.2
-            }
-          ]
+          "fixture": "ms-continuation-short-valid",
+          "file": "ms-continuation-short-valid.json",
+          "category": "positive",
+          "evaluations": 65,
+          "signals": 14,
+          "errors": 0
         },
         {
-          "fixture": "ms-continuation-long-valid",
-          "case": "58|LONG",
-          "diffs": [
-            {
-              "field": "stop",
-              "ts": 126.6,
-              "py": 122.6
-            },
-            {
-              "field": "t1",
-              "ts": 142.8,
-              "py": 150.8
-            },
-            {
-              "field": "t2",
-              "ts": 148.20000000000002,
-              "py": 160.2
-            }
-          ]
+          "fixture": "ms-continuation-short-variant-jitter",
+          "file": "ms-continuation-short-variant-jitter.json",
+          "category": "positive",
+          "evaluations": 65,
+          "signals": 14,
+          "errors": 0
         },
         {
-          "fixture": "ms-continuation-long-valid",
-          "case": "59|LONG",
-          "diffs": [
-            {
-              "field": "stop",
-              "ts": 125.348408237451,
-              "py": 122.6
-            },
-            {
-              "field": "t1",
-              "ts": 136.303183525098,
-              "py": 141.8
-            },
-            {
-              "field": "t2",
-              "ts": 139.954775287647,
-              "py": 148.2
-            }
-          ]
+          "fixture": "ms-continuation-short-variant-params",
+          "file": "ms-continuation-short-variant-params.json",
+          "category": "positive",
+          "evaluations": 65,
+          "signals": 14,
+          "errors": 0
         },
         {
-          "fixture": "ms-continuation-long-valid",
-          "case": "60|LONG",
-          "diffs": [
-            {
-              "field": "stop",
-              "ts": 126.45923622049021,
-              "py": 122.6
-            },
-            {
-              "field": "t1",
-              "ts": 137.08152755901958,
-              "py": 144.8
-            },
-            {
-              "field": "t2",
-              "ts": 140.62229133852935,
-              "py": 152.2
-            }
-          ]
+          "fixture": "ms-continuation-short-variant-scale",
+          "file": "ms-continuation-short-variant-scale.json",
+          "category": "positive",
+          "evaluations": 65,
+          "signals": 14,
+          "errors": 0
         },
         {
-          "fixture": "ms-continuation-long-valid",
-          "case": "61|LONG",
-          "diffs": [
-            {
-              "field": "stop",
-              "ts": 128.6,
-              "py": 123.6
-            },
-            {
-              "field": "t1",
-              "ts": 141.8,
-              "py": 151.8
-            },
-            {
-              "field": "t2",
-              "ts": 146.20000000000002,
-              "py": 161.2
-            }
-          ]
-        },
-        {
-          "fixture": "ms-continuation-long-valid",
-          "case": "62|LONG",
-          "diffs": [
-            {
-              "field": "stop",
-              "ts": 128.6,
-              "py": 124.6
-            },
-            {
-              "field": "t1",
-              "ts": 144.8,
-              "py": 152.8
-            },
-            {
-              "field": "t2",
-              "ts": 150.20000000000002,
-              "py": 162.2
-            }
-          ]
-        },
-        {
-          "fixture": "ms-continuation-long-valid",
-          "case": "63|LONG",
-          "diffs": [
-            {
-              "field": "stop",
-              "ts": 127.34739139082252,
-              "py": 124.6
-            },
-            {
-              "field": "t1",
-              "ts": 138.30521721835495,
-              "py": 143.8
-            },
-            {
-              "field": "t2",
-              "ts": 141.95782582753242,
-              "py": 150.2
-            }
-          ]
-        },
-        {
-          "fixture": "ms-continuation-long-valid",
-          "case": "64|LONG",
-          "issue": "missing_in_py"
-        },
-        {
-          "fixture": "ms-continuation-long-valid",
-          "case": "50|LONG",
-          "issue": "missing_in_ts"
+          "fixture": "ms-continuation-tight-targets",
+          "file": "ms-continuation-tight-targets.json",
+          "category": "edge",
+          "evaluations": 65,
+          "signals": 9,
+          "errors": 0
         }
       ]
     },
-    "trend-reversal-momentum": {
-      "fixtures": 2,
-      "comparisons": 1,
-      "matches": 0,
-      "material_differences": 1,
-      "status": "BLOCKED",
-      "notes": [
+    "range-breakout-retest": {
+      "status": "PARITY_OK",
+      "tolerance": 1e-8,
+      "comparedFields": [
+        "fixture identity and category",
+        "evaluation count",
+        "signal presence and index",
+        "strategyKey",
+        "strategyVersion",
+        "triggerCloseTime",
+        "timeframe",
+        "direction",
+        "entry",
+        "stop",
+        "targets",
+        "rr",
+        "score",
+        "scoreFactors",
+        "rationale",
+        "invalidation",
+        "evidence"
+      ],
+      "knownIntentionalDifferences": [
+        "Exception message wording for rejected parameters is not compared; both implementations rejecting the same evaluation is treated as a match.",
+        "Rationale and invalidation text is compared exactly for emitted signals."
+      ],
+      "remainingLimitations": [
+        "Fixtures are deterministic synthetic market sequences, not independent market samples.",
+        "Parity proves implementation agreement, not profitability, statistical significance, or data sufficiency.",
+        "Only 1h fixtures are exercised by this harness.",
+        "The Python runner executes the source tree; its fixture and strategy revision must match the TypeScript build."
+      ],
+      "coverage": {
+        "fixtures": 16,
+        "positiveFixtures": 8,
+        "negativeFixtures": 3,
+        "edgeFixtures": 5,
+        "positiveSignals": 8,
+        "negativeSignals": 0,
+        "edgeSignals": 3,
+        "positiveDirections": [
+          "LONG",
+          "SHORT"
+        ],
+        "issues": []
+      },
+      "evaluations": 1011,
+      "comparisons": 1011,
+      "signals": 11,
+      "matches": 1011,
+      "materialDifferences": 0,
+      "notes": [],
+      "fixtures": [
         {
-          "fixture": "reversal-long-valid",
-          "case": "65|LONG",
-          "issue": "missing_in_py"
+          "fixture": "breakout-retest-conflicting-htf",
+          "file": "breakout-retest-conflicting-htf.json",
+          "category": "edge",
+          "evaluations": 62,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "breakout-retest-incomplete-final",
+          "file": "breakout-retest-incomplete-final.json",
+          "category": "edge",
+          "evaluations": 63,
+          "signals": 2,
+          "errors": 0
+        },
+        {
+          "fixture": "breakout-retest-insufficient-htf",
+          "file": "breakout-retest-insufficient-htf.json",
+          "category": "edge",
+          "evaluations": 62,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "breakout-retest-invalid-params",
+          "file": "breakout-retest-invalid-params.json",
+          "category": "edge",
+          "evaluations": 62,
+          "signals": 0,
+          "errors": 62
+        },
+        {
+          "fixture": "breakout-retest-long-borderline",
+          "file": "breakout-retest-long-borderline.json",
+          "category": "negative",
+          "evaluations": 62,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "breakout-retest-long-valid",
+          "file": "breakout-retest-long-valid.json",
+          "category": "positive",
+          "evaluations": 62,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "breakout-retest-long-variant-jitter",
+          "file": "breakout-retest-long-variant-jitter.json",
+          "category": "positive",
+          "evaluations": 62,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "breakout-retest-long-variant-params",
+          "file": "breakout-retest-long-variant-params.json",
+          "category": "positive",
+          "evaluations": 62,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "breakout-retest-long-variant-scale",
+          "file": "breakout-retest-long-variant-scale.json",
+          "category": "positive",
+          "evaluations": 62,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "breakout-retest-no-setup",
+          "file": "breakout-retest-no-setup.json",
+          "category": "negative",
+          "evaluations": 80,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "breakout-retest-short-borderline",
+          "file": "breakout-retest-short-borderline.json",
+          "category": "negative",
+          "evaluations": 62,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "breakout-retest-short-valid",
+          "file": "breakout-retest-short-valid.json",
+          "category": "positive",
+          "evaluations": 62,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "breakout-retest-short-variant-jitter",
+          "file": "breakout-retest-short-variant-jitter.json",
+          "category": "positive",
+          "evaluations": 62,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "breakout-retest-short-variant-params",
+          "file": "breakout-retest-short-variant-params.json",
+          "category": "positive",
+          "evaluations": 62,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "breakout-retest-short-variant-scale",
+          "file": "breakout-retest-short-variant-scale.json",
+          "category": "positive",
+          "evaluations": 62,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "breakout-retest-tight-targets",
+          "file": "breakout-retest-tight-targets.json",
+          "category": "edge",
+          "evaluations": 62,
+          "signals": 1,
+          "errors": 0
         }
       ]
     },
     "support-resistance-rejection": {
-      "fixtures": 2,
-      "comparisons": 1,
-      "matches": 0,
-      "material_differences": 1,
-      "status": "BLOCKED",
-      "notes": [
+      "status": "PARITY_OK",
+      "tolerance": 1e-8,
+      "comparedFields": [
+        "fixture identity and category",
+        "evaluation count",
+        "signal presence and index",
+        "strategyKey",
+        "strategyVersion",
+        "triggerCloseTime",
+        "timeframe",
+        "direction",
+        "entry",
+        "stop",
+        "targets",
+        "rr",
+        "score",
+        "scoreFactors",
+        "rationale",
+        "invalidation",
+        "evidence"
+      ],
+      "knownIntentionalDifferences": [
+        "Exception message wording for rejected parameters is not compared; both implementations rejecting the same evaluation is treated as a match.",
+        "Rationale and invalidation text is compared exactly for emitted signals."
+      ],
+      "remainingLimitations": [
+        "Fixtures are deterministic synthetic market sequences, not independent market samples.",
+        "Parity proves implementation agreement, not profitability, statistical significance, or data sufficiency.",
+        "Only 1h fixtures are exercised by this harness.",
+        "The Python runner executes the source tree; its fixture and strategy revision must match the TypeScript build."
+      ],
+      "coverage": {
+        "fixtures": 16,
+        "positiveFixtures": 8,
+        "negativeFixtures": 3,
+        "edgeFixtures": 5,
+        "positiveSignals": 8,
+        "negativeSignals": 0,
+        "edgeSignals": 3,
+        "positiveDirections": [
+          "LONG",
+          "SHORT"
+        ],
+        "issues": []
+      },
+      "evaluations": 1316,
+      "comparisons": 1316,
+      "signals": 11,
+      "matches": 1316,
+      "materialDifferences": 0,
+      "notes": [],
+      "fixtures": [
+        {
+          "fixture": "sr-rejection-conflicting-htf",
+          "file": "sr-rejection-conflicting-htf.json",
+          "category": "edge",
+          "evaluations": 81,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "sr-rejection-incomplete-final",
+          "file": "sr-rejection-incomplete-final.json",
+          "category": "edge",
+          "evaluations": 82,
+          "signals": 2,
+          "errors": 0
+        },
+        {
+          "fixture": "sr-rejection-insufficient-htf",
+          "file": "sr-rejection-insufficient-htf.json",
+          "category": "edge",
+          "evaluations": 81,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "sr-rejection-invalid-params",
+          "file": "sr-rejection-invalid-params.json",
+          "category": "edge",
+          "evaluations": 81,
+          "signals": 0,
+          "errors": 81
+        },
+        {
+          "fixture": "sr-rejection-long-borderline",
+          "file": "sr-rejection-long-borderline.json",
+          "category": "negative",
+          "evaluations": 81,
+          "signals": 0,
+          "errors": 0
+        },
         {
           "fixture": "sr-rejection-long-valid",
-          "case": "80|LONG",
-          "issue": "missing_in_py"
+          "file": "sr-rejection-long-valid.json",
+          "category": "positive",
+          "evaluations": 81,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "sr-rejection-long-variant-jitter",
+          "file": "sr-rejection-long-variant-jitter.json",
+          "category": "positive",
+          "evaluations": 81,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "sr-rejection-long-variant-params",
+          "file": "sr-rejection-long-variant-params.json",
+          "category": "positive",
+          "evaluations": 81,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "sr-rejection-long-variant-scale",
+          "file": "sr-rejection-long-variant-scale.json",
+          "category": "positive",
+          "evaluations": 81,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "sr-rejection-no-setup",
+          "file": "sr-rejection-no-setup.json",
+          "category": "negative",
+          "evaluations": 100,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "sr-rejection-short-borderline",
+          "file": "sr-rejection-short-borderline.json",
+          "category": "negative",
+          "evaluations": 81,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "sr-rejection-short-valid",
+          "file": "sr-rejection-short-valid.json",
+          "category": "positive",
+          "evaluations": 81,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "sr-rejection-short-variant-jitter",
+          "file": "sr-rejection-short-variant-jitter.json",
+          "category": "positive",
+          "evaluations": 81,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "sr-rejection-short-variant-params",
+          "file": "sr-rejection-short-variant-params.json",
+          "category": "positive",
+          "evaluations": 81,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "sr-rejection-short-variant-scale",
+          "file": "sr-rejection-short-variant-scale.json",
+          "category": "positive",
+          "evaluations": 81,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "sr-rejection-tight-targets",
+          "file": "sr-rejection-tight-targets.json",
+          "category": "edge",
+          "evaluations": 81,
+          "signals": 1,
+          "errors": 0
+        }
+      ]
+    },
+    "trend-reversal-momentum": {
+      "status": "PARITY_OK",
+      "tolerance": 1e-8,
+      "comparedFields": [
+        "fixture identity and category",
+        "evaluation count",
+        "signal presence and index",
+        "strategyKey",
+        "strategyVersion",
+        "triggerCloseTime",
+        "timeframe",
+        "direction",
+        "entry",
+        "stop",
+        "targets",
+        "rr",
+        "score",
+        "scoreFactors",
+        "rationale",
+        "invalidation",
+        "evidence"
+      ],
+      "knownIntentionalDifferences": [
+        "Exception message wording for rejected parameters is not compared; both implementations rejecting the same evaluation is treated as a match.",
+        "Rationale and invalidation text is compared exactly for emitted signals."
+      ],
+      "remainingLimitations": [
+        "Fixtures are deterministic synthetic market sequences, not independent market samples.",
+        "Parity proves implementation agreement, not profitability, statistical significance, or data sufficiency.",
+        "Only 1h fixtures are exercised by this harness.",
+        "The Python runner executes the source tree; its fixture and strategy revision must match the TypeScript build."
+      ],
+      "coverage": {
+        "fixtures": 16,
+        "positiveFixtures": 8,
+        "negativeFixtures": 3,
+        "edgeFixtures": 5,
+        "positiveSignals": 8,
+        "negativeSignals": 0,
+        "edgeSignals": 3,
+        "positiveDirections": [
+          "LONG",
+          "SHORT"
+        ],
+        "issues": []
+      },
+      "evaluations": 1111,
+      "comparisons": 1111,
+      "signals": 11,
+      "matches": 1111,
+      "materialDifferences": 0,
+      "notes": [],
+      "fixtures": [
+        {
+          "fixture": "reversal-conflicting-htf",
+          "file": "reversal-conflicting-htf.json",
+          "category": "edge",
+          "evaluations": 66,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "reversal-incomplete-final",
+          "file": "reversal-incomplete-final.json",
+          "category": "edge",
+          "evaluations": 67,
+          "signals": 2,
+          "errors": 0
+        },
+        {
+          "fixture": "reversal-insufficient-htf",
+          "file": "reversal-insufficient-htf.json",
+          "category": "edge",
+          "evaluations": 66,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "reversal-invalid-params",
+          "file": "reversal-invalid-params.json",
+          "category": "edge",
+          "evaluations": 66,
+          "signals": 0,
+          "errors": 66
+        },
+        {
+          "fixture": "reversal-long-borderline",
+          "file": "reversal-long-borderline.json",
+          "category": "negative",
+          "evaluations": 66,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "reversal-long-valid",
+          "file": "reversal-long-valid.json",
+          "category": "positive",
+          "evaluations": 66,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "reversal-long-variant-jitter",
+          "file": "reversal-long-variant-jitter.json",
+          "category": "positive",
+          "evaluations": 66,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "reversal-long-variant-params",
+          "file": "reversal-long-variant-params.json",
+          "category": "positive",
+          "evaluations": 66,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "reversal-long-variant-scale",
+          "file": "reversal-long-variant-scale.json",
+          "category": "positive",
+          "evaluations": 66,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "reversal-no-setup",
+          "file": "reversal-no-setup.json",
+          "category": "negative",
+          "evaluations": 120,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "reversal-short-borderline",
+          "file": "reversal-short-borderline.json",
+          "category": "negative",
+          "evaluations": 66,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "reversal-short-valid",
+          "file": "reversal-short-valid.json",
+          "category": "positive",
+          "evaluations": 66,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "reversal-short-variant-jitter",
+          "file": "reversal-short-variant-jitter.json",
+          "category": "positive",
+          "evaluations": 66,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "reversal-short-variant-params",
+          "file": "reversal-short-variant-params.json",
+          "category": "positive",
+          "evaluations": 66,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "reversal-short-variant-scale",
+          "file": "reversal-short-variant-scale.json",
+          "category": "positive",
+          "evaluations": 66,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "reversal-tight-targets",
+          "file": "reversal-tight-targets.json",
+          "category": "edge",
+          "evaluations": 66,
+          "signals": 1,
+          "errors": 0
         }
       ]
     },
     "volatility-expansion-breakout": {
-      "fixtures": 2,
-      "comparisons": 1,
-      "matches": 0,
-      "material_differences": 1,
-      "status": "BLOCKED",
-      "notes": [
+      "status": "PARITY_OK",
+      "tolerance": 1e-8,
+      "comparedFields": [
+        "fixture identity and category",
+        "evaluation count",
+        "signal presence and index",
+        "strategyKey",
+        "strategyVersion",
+        "triggerCloseTime",
+        "timeframe",
+        "direction",
+        "entry",
+        "stop",
+        "targets",
+        "rr",
+        "score",
+        "scoreFactors",
+        "rationale",
+        "invalidation",
+        "evidence"
+      ],
+      "knownIntentionalDifferences": [
+        "Exception message wording for rejected parameters is not compared; both implementations rejecting the same evaluation is treated as a match.",
+        "Rationale and invalidation text is compared exactly for emitted signals."
+      ],
+      "remainingLimitations": [
+        "Fixtures are deterministic synthetic market sequences, not independent market samples.",
+        "Parity proves implementation agreement, not profitability, statistical significance, or data sufficiency.",
+        "Only 1h fixtures are exercised by this harness.",
+        "The Python runner executes the source tree; its fixture and strategy revision must match the TypeScript build."
+      ],
+      "coverage": {
+        "fixtures": 17,
+        "positiveFixtures": 8,
+        "negativeFixtures": 3,
+        "edgeFixtures": 6,
+        "positiveSignals": 8,
+        "negativeSignals": 0,
+        "edgeSignals": 2,
+        "positiveDirections": [
+          "LONG",
+          "SHORT"
+        ],
+        "issues": []
+      },
+      "evaluations": 1378,
+      "comparisons": 1378,
+      "signals": 10,
+      "matches": 1378,
+      "materialDifferences": 0,
+      "notes": [],
+      "fixtures": [
+        {
+          "fixture": "vol-expansion-conflicting-htf",
+          "file": "vol-expansion-conflicting-htf.json",
+          "category": "edge",
+          "evaluations": 81,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "vol-expansion-incomplete-final",
+          "file": "vol-expansion-incomplete-final.json",
+          "category": "edge",
+          "evaluations": 82,
+          "signals": 2,
+          "errors": 0
+        },
+        {
+          "fixture": "vol-expansion-insufficient-htf",
+          "file": "vol-expansion-insufficient-htf.json",
+          "category": "edge",
+          "evaluations": 81,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "vol-expansion-invalid-params",
+          "file": "vol-expansion-invalid-params.json",
+          "category": "edge",
+          "evaluations": 81,
+          "signals": 0,
+          "errors": 81
+        },
+        {
+          "fixture": "vol-expansion-long-borderline",
+          "file": "vol-expansion-long-borderline.json",
+          "category": "negative",
+          "evaluations": 81,
+          "signals": 0,
+          "errors": 0
+        },
         {
           "fixture": "vol-expansion-long-valid",
-          "case": "80|LONG",
-          "issue": "missing_in_py"
+          "file": "vol-expansion-long-valid.json",
+          "category": "positive",
+          "evaluations": 81,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "vol-expansion-long-variant-jitter",
+          "file": "vol-expansion-long-variant-jitter.json",
+          "category": "positive",
+          "evaluations": 81,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "vol-expansion-long-variant-params",
+          "file": "vol-expansion-long-variant-params.json",
+          "category": "positive",
+          "evaluations": 81,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "vol-expansion-long-variant-scale",
+          "file": "vol-expansion-long-variant-scale.json",
+          "category": "positive",
+          "evaluations": 81,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "vol-expansion-low-volume-invalid",
+          "file": "vol-expansion-low-volume-invalid.json",
+          "category": "negative",
+          "evaluations": 81,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "vol-expansion-short-borderline",
+          "file": "vol-expansion-short-borderline.json",
+          "category": "negative",
+          "evaluations": 81,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "vol-expansion-short-valid",
+          "file": "vol-expansion-short-valid.json",
+          "category": "positive",
+          "evaluations": 81,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "vol-expansion-short-variant-jitter",
+          "file": "vol-expansion-short-variant-jitter.json",
+          "category": "positive",
+          "evaluations": 81,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "vol-expansion-short-variant-params",
+          "file": "vol-expansion-short-variant-params.json",
+          "category": "positive",
+          "evaluations": 81,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "vol-expansion-short-variant-scale",
+          "file": "vol-expansion-short-variant-scale.json",
+          "category": "positive",
+          "evaluations": 81,
+          "signals": 1,
+          "errors": 0
+        },
+        {
+          "fixture": "vol-expansion-tight-targets",
+          "file": "vol-expansion-tight-targets.json",
+          "category": "edge",
+          "evaluations": 81,
+          "signals": 0,
+          "errors": 0
+        },
+        {
+          "fixture": "vol-expansion-zero-volume",
+          "file": "vol-expansion-zero-volume.json",
+          "category": "edge",
+          "evaluations": 81,
+          "signals": 0,
+          "errors": 0
         }
       ]
     }
   },
   "summary": {
     "totalStrategies": 6,
-    "parity": 1,
-    "blocked": 5
+    "parity": 6,
+    "blocked": 0,
+    "insufficientCoverage": 0,
+    "materialDifferences": 0,
+    "fixtures": 96,
+    "positiveFixtures": 48,
+    "negativeFixtures": 17,
+    "edgeFixtures": 31,
+    "positiveSignals": 150,
+    "negativeSignals": 0,
+    "overallStatus": "PARITY_OK"
   }
 }

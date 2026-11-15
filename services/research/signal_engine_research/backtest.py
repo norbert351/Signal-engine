@@ -13,6 +13,7 @@ class Bar:
     close: Decimal
     close_timestamp: int | None = None
     volume: Decimal = Decimal("0")
+    complete: bool = True
 
 @dataclass(frozen=True)
 class Setup:
@@ -59,7 +60,7 @@ def simulate(bars: list[Bar], setups: list[Setup], costs: CostModel) -> list[Tra
         entry_bar = ordered[i + 1]
         entry = entry_bar.open
         is_long = setup.direction == "long"
-        position_costs = CostModel(**{**costs.model_dump(), "funding_bps_per_8h": costs.funding_bps_per_8h if is_long else -costs.funding_bps_per_8h})
+        position_costs = costs.model_copy(update={"funding_bps_per_8h": costs.funding_bps_per_8h if is_long else -costs.funding_bps_per_8h})
         risk = entry - setup.stop if is_long else setup.stop - entry
         if risk <= 0 or (is_long and entry >= setup.target) or (not is_long and entry <= setup.target):
             continue

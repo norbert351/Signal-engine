@@ -43,16 +43,17 @@ Purpose: define intended, deterministic rules for TS (`packages/core/src/strateg
 - HTF trend aligned.
 - ATR expansion: current ATR / average of prior ATRs >= `volatilityExpansion`.
 - Bollinger(`bollingerPeriod`,`bollingerMultiplier`) width expansion vs prior width >= 5%.
-- Relative volume (`volumeLookback`) >= `minRelativeVolume` (real volume when available, else range proxy consistently).
+- Relative volume (`volumeLookback`) >= `minRelativeVolume`; current bar volume divided by the mean of the preceding `volumeLookback` bars. Real volume is required: missing or zero volume yields no trigger, and `volumeConfirmation` defaults to `0.5` in score factors. No synthetic volume fallback is used.
 - Close breaks Bollinger band and prior `rangeLookback` range extreme in trend direction.
 - Stop: trigger extreme or `close ± atr*stopAtrMultiple`.
 
-## Known divergence areas to resolve
-- S/R detection/clustering/tolerance and level selection.
-- Market structure swing confirmation, trend classification, BOS/CHOCH event timing and continuation window.
-- Reversal momentum (RSI+MACD), HTF RSI alignment/no-lookahead and exhaustion criteria.
-- Volatility expansion inputs (ATR history window, relative volume definition) and breakout confirmation.
-- Indicator implementations (EMA/RSI/MACD/Bollinger/ATR/volume ratio) must be numerically consistent within tolerance.
+## Resolved parity details
+- S/R detection uses confirmed swing pivots, `srLookback`, percentage clustering (`srTolerancePct`), and the nearest valid level on the trade side.
+- Market structure uses confirmed swings and events computed relative to the same structure window; BOS/CHOCH recency is measured from the end of that window (`<= 6` completed bars), including `barsSinceBreak`.
+- Reversal momentum uses the same RSI/MACD alignment and HTF RSI exhaustion checks in both implementations; HTF candles must close no later than the entry trigger.
+- Volatility expansion uses the prior 20 ATR values (excluding the current ATR), current-vs-prior Bollinger width, and the real-volume definition above.
+- Indicators are verified independently and through parity fixtures: SMA-seeded EMA, RSI, MACD signal alignment, Wilder ATR, population-deviation Bollinger absolute width, and prior-window relative volume.
+- Latest deterministic fixture matrix: 6/6 strategies `PARITY_OK`, 0 material differences across 50 fixtures.
 
 ## Parity acceptance
 Per strategy, on identical deterministic fixtures: same trigger eligibility, direction, entry, stop, T1/T2, RR (within tolerance), and no lookahead. Unresolved material difference => `BLOCKED` for production readiness.

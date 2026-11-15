@@ -104,6 +104,7 @@ export function resolveStrategyConfig(overrides: Partial<StrategyConfig> = {}): 
   if (!Number.isFinite(config.minRewardRisk) || config.minRewardRisk <= 0) throw new Error("Invalid minimum reward/risk");
   if (!Number.isFinite(config.stopAtrMultiple) || config.stopAtrMultiple <= 0) throw new Error("Invalid stop ATR multiple");
   if (!Number.isFinite(config.target2Multiple) || config.target2Multiple <= config.minRewardRisk) throw new Error("Invalid second target multiple");
+  if (!Number.isInteger(config.rangeLookback) || config.rangeLookback < 2) throw new Error("Invalid range lookback");
   return config;
 }
 
@@ -353,14 +354,15 @@ export function evaluateMarketStructureContinuation(context: StrategyContext, ov
   const { entry, last, atrValue, htfTrend } = prepared;
   if (htfTrend === "range") return undefined;
   const direction: Direction = htfTrend === "up" ? "LONG" : "SHORT";
-  const structure = analyzeMarketStructure(entry.slice(-Math.max(80, cfg.structureLookback + 20)), cfg.swingLeft, cfg.swingRight);
+  const structureWindow = entry.slice(-Math.max(80, cfg.structureLookback + 20));
+  const structure = analyzeMarketStructure(structureWindow, cfg.swingLeft, cfg.swingRight);
   if (structure.trend !== htfTrend) return undefined;
-  const recent = structure.events.filter((event) => event.index >= entry.length - Math.max(80, cfg.structureLookback + 20) - 8);
+  const recent = structure.events.filter((event) => structureWindow.length - 1 - event.index <= 6);
   const breakEvent = recent
     .filter((event) => event.type === (direction === "LONG" ? "BOS_UP" : "BOS_DOWN"))
     .at(-1);
   if (!breakEvent) return undefined;
-  const barsSinceBreak = entry.length - 1 - breakEvent.index;
+  const barsSinceBreak = structureWindow.length - 1 - breakEvent.index;
   if (barsSinceBreak < 0 || barsSinceBreak > 6) return undefined;
   const structural =
     direction === "LONG"
@@ -399,8 +401,9 @@ export function evaluateTrendReversalMomentum(context: StrategyContext, override
   const prepared = prepare(context, cfg);
   if (!prepared) return undefined;
   const { entry, last, atrValue, htfTrend } = prepared;
-  const structure = analyzeMarketStructure(entry.slice(-Math.max(80, cfg.structureLookback + 20)), cfg.swingLeft, cfg.swingRight);
-  const recent = structure.events.filter((event) => event.index >= entry.length - Math.max(80, cfg.structureLookback + 20) - 6);
+  const structureWindow = entry.slice(-Math.max(80, cfg.structureLookback + 20));
+  const structure = analyzeMarketStructure(structureWindow, cfg.swingLeft, cfg.swingRight);
+  const recent = structure.events.filter((event) => structureWindow.length - 1 - event.index <= 6);
   const reversal = recent.filter((event) => event.type === "CHOCH_UP" || event.type === "CHOCH_DOWN").at(-1);
   if (!reversal) return undefined;
   const direction: Direction = reversal.type === "CHOCH_UP" ? "LONG" : "SHORT";
