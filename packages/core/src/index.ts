@@ -162,3 +162,9 @@ export function scoreOpportunity(
 export * from "./indicators.js";
 export * from "./risk.js";
 export * from "./strategies.js";
+
+export * from "./news-intelligence.js";
+export * from "./event-intelligence.js";
+export * from "./ai-engine.js";
+export * from "./event-trading.js";
+export * from "./central-intelligence.js";

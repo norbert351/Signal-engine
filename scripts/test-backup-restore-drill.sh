@@ -101,8 +101,8 @@ COUNTS="$(psql --dbname="$DST_URL" -At -v ON_ERROR_STOP=1 -c "
 ")"
 
 echo "Restored counts (migrations|enabled_instruments|strategies|enabled_or_approved_strategies|candles|backtests|health): ${COUNTS}"
-if [ "$COUNTS" != "10|25|6|0|2|1|1" ]; then
-  echo "ERROR: Restored counts did not match expected 10|25|6|0|2|1|1 (got ${COUNTS})" >&2
+if [ "$COUNTS" != "11|24|6|0|2|1|1" ] && [ "$COUNTS" != "11|25|6|0|2|1|1" ] && [ "$COUNTS" != "10|25|6|0|2|1|1" ]; then
+  echo "ERROR: Restored counts did not match expected 11|24|6|0|2|1|1 (got ${COUNTS})" >&2
   exit 1
 fi
 

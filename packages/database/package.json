@@ -41,6 +41,10 @@
     "./system-repository": {
       "types": "./dist/system-repository.d.ts",
       "import": "./dist/system-repository.js"
+    },
+    "./intelligence-repository": {
+      "types": "./dist/intelligence-repository.d.ts",
+      "import": "./dist/intelligence-repository.js"
     }
   },
   "scripts": {

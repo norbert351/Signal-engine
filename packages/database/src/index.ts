@@ -15,3 +15,4 @@ export const sql = postgres(url, {
 });
 export const db = drizzle(sql, { schema });
 export * from "./schema.js";
+export * from "./intelligence-repository.js";
