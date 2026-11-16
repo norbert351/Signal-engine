@@ -560,7 +560,7 @@ export class NewsFactExtractionService {
       });
     }
 
-    const pctMatch = combined.match(/\b(\d{1,2}\.\d{1,2})%\b/);
+    const pctMatch = combined.match(/\b(\d{1,2}(?:\.\d{1,2})?)%(?!\w)/);
     if (pctMatch && (category === "inflation_announcements" || category === "employment_reports" || category === "gdp_releases")) {
       facts.push({
         factType: "macro_print",
