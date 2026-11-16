@@ -253,3 +253,87 @@ describe("Phase 5 worker operational resilience, notifications, and monitoring",
     expect(redactSecretsFromText("redis://default:my-redis-pass@redis:6379")).toBe("redis://default:[redacted]@redis:6379");
   });
 });
+
+import {
+  formatBreakingNewsMessage,
+  formatDailyIntelligenceSummaryMessage,
+  formatEventAlertMessage,
+  formatEventRiskWarningMessage,
+  formatEventTradeMessage
+} from "./format.js";
+import { ALL_INTELLIGENCE_QUEUES } from "./queues.js";
+
+describe("Stage 8 — Event & News Telegram Formatting and Isolated Intelligence Queues", () => {
+  it("formats event alerts, event trade setups, breaking news, risk warnings, and daily summaries safely", () => {
+    const alertMsg = formatEventAlertMessage({
+      eventName: "US CPI Release",
+      category: "inflation_announcements",
+      importance: "high",
+      scheduledTimeIso: "2026-11-15T13:30:00.000Z",
+      affectedInstruments: ["BTCUSDT", "EUR_USD", "USD_JPY", "XAU_USD"],
+      previousValue: "3.1%",
+      consensusValue: "3.0%",
+      status: "Awaiting release"
+    });
+    expect(alertMsg).toContain("SIGNAL ENGINE | EVENT ALERT");
+    expect(alertMsg).toContain("BTCUSDT, EUR_USD, USD_JPY, XAU_USD");
+
+    const tradeMsg = formatEventTradeMessage({
+      strategyName: "Post-event momentum",
+      eventName: "US CPI",
+      symbol: "EUR_USD",
+      direction: "LONG",
+      entry: 1.0551,
+      stopLoss: 1.0521,
+      takeProfit: 1.0611,
+      rewardRisk: "2.00",
+      evidence: ["Actual result versus consensus", "Momentum confirmation"],
+      riskClassification: "HIGH_RISK"
+    });
+    expect(tradeMsg).toContain("SIGNAL ENGINE | EVENT TRADE");
+    expect(tradeMsg).toContain("Entry: 1.05510");
+    expect(tradeMsg).toContain("Signal only. No trade has been placed.");
+
+    const newsMsg = formatBreakingNewsMessage({
+      headline: "Federal Reserve releases monetary policy statement",
+      sourceName: "Federal Reserve",
+      category: "central_bank_decisions",
+      importance: "high",
+      credibilityScore: 98,
+      affectedSymbols: ["EUR_USD", "BTCUSDT"],
+      publishedAtIso: "2026-11-15T19:00:00.000Z"
+    });
+    expect(newsMsg).toContain("SIGNAL ENGINE | BREAKING NEWS");
+
+    const riskMsg = formatEventRiskWarningMessage({
+      symbol: "BTCUSDT",
+      eventName: "FOMC Rate Decision",
+      riskLevel: "EXTREME",
+      reasons: ["15-minute pre-event blackout window"]
+    });
+    expect(riskMsg).toContain("SIGNAL ENGINE | ELEVATED EVENT RISK");
+
+    const summaryMsg = formatDailyIntelligenceSummaryMessage({
+      title: "Daily Market Intelligence",
+      marketRegime: "event_driven_volatility",
+      summary: "High-impact macro window active.",
+      riskWarnings: ["US CPI in 30 minutes"]
+    });
+    expect(summaryMsg).toContain("SIGNAL ENGINE | DAILY INTELLIGENCE SUMMARY");
+  });
+
+  it("defines all 9 isolated intelligence BullMQ queues with bounded retry and backoff defaults", () => {
+    const names = ALL_INTELLIGENCE_QUEUES.map(([name]) => name);
+    expect(names).toEqual([
+      "news-ingestion",
+      "news-normalization",
+      "news-analysis",
+      "event-calendar-sync",
+      "event-monitoring",
+      "event-impact-analysis",
+      "event-trading-analysis",
+      "ai-reasoning",
+      "intelligence-reporting"
+    ]);
+  });
+});

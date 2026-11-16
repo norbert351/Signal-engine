@@ -236,7 +236,7 @@ function computeCandleMetrics(entryCandles: Candle[], confirmationCandles: Candl
   const closedConfirm = onlyClosedCandles(confirmationCandles).filter((c) => c.closeTime <= lastEntry.closeTime);
   if (closedConfirm.length < 25) return null;
 
-  const entryAtrs = atr(closedEntry, 14);
+  const entryAtrs = atr(closedEntry, 14).filter((v): v is number => v !== null && Number.isFinite(v));
   const currentAtr = entryAtrs.at(-1) ?? 0;
   if (currentAtr <= 0) return null;
 
@@ -244,13 +244,14 @@ function computeCandleMetrics(entryCandles: Candle[], confirmationCandles: Candl
   const avgAtr = priorAtrs.length > 0 ? priorAtrs.reduce((a, b) => a + b, 0) / priorAtrs.length : currentAtr;
   const volatilityRatio = avgAtr > 0 ? currentAtr / avgAtr : 1;
 
-  const volRatio = relativeVolume(closedEntry, 20);
+  const volRatioSeries = relativeVolume(closedEntry, 20);
+  const volRatio = volRatioSeries.at(-1) ?? null;
   const prevClose = closedEntry.at(-2)!.close;
   const observedGapPct = prevClose > 0 ? (Math.abs(lastEntry.open - prevClose) / prevClose) * 100 : 0;
 
   const confirmCloses = closedConfirm.map((c) => c.close);
-  const confirmFast = emaSeries(confirmCloses, 10).at(-1)!;
-  const confirmSlow = emaSeries(confirmCloses, 20).at(-1)!;
+  const confirmFast = emaSeries(confirmCloses, 10).filter((v): v is number => v !== null).at(-1) ?? confirmCloses.at(-1)!;
+  const confirmSlow = emaSeries(confirmCloses, 20).filter((v): v is number => v !== null).at(-1) ?? confirmCloses.at(-1)!;
   const confirmLast = closedConfirm.at(-1)!.close;
   const htfTrend: "LONG" | "SHORT" | "RANGE" =
     confirmFast > confirmSlow && confirmLast > confirmFast
@@ -910,33 +911,53 @@ export class EventBacktestService {
           ? (ev.scheduledAt?.getTime() ?? 0) - 60 * 60_000
           : (ev.publishedAt ?? ev.scheduledAt ?? ev.collectedAt).getTime() + 15 * 60_000;
 
-      // Find the first completed bar whose closeTime >= eventTriggerMs
-      const evalIdx = closedEntry.findIndex((c) => c.closeTime >= eventTriggerMs);
-      if (evalIdx < 30 || evalIdx >= closedEntry.length - 1) continue;
+      const startEvalIdx = closedEntry.findIndex((c) => c.closeTime >= eventTriggerMs);
+      if (startEvalIdx < 30 || startEvalIdx >= closedEntry.length - 1) continue;
       eligibleEvents += 1;
 
-      const evalBar = closedEntry[evalIdx]!;
-      // Prevent lookahead: pass only candles closed on or before evalBar.closeTime
-      const entryPrefix = closedEntry.slice(0, evalIdx + 1);
-      const confirmPrefix = closedConfirm.filter((c) => c.closeTime <= evalBar.closeTime);
+      let chosenSignal: EventSignalEvaluationOutput | null = null;
+      let chosenIdx = startEvalIdx;
+      const maxSearchIdx = Math.min(closedEntry.length - 2, startEvalIdx + 4);
 
-      const evalInput: EventStrategyEvaluationInput = {
-        event: ev,
-        symbol: input.symbol,
-        market: input.market,
-        timeframe: input.timeframe,
-        confirmationTimeframe: input.confirmationTimeframe,
-        entryCandles: entryPrefix,
-        confirmationCandles: confirmPrefix,
-        observedSpreadBps: input.costs.spreadBps
-      };
+      for (let candidateIdx = startEvalIdx; candidateIdx <= maxSearchIdx; candidateIdx++) {
+        const evalBar = closedEntry[candidateIdx]!;
+        // Prevent lookahead: pass only candles closed on or before evalBar.closeTime
+        const entryPrefix = closedEntry.slice(0, candidateIdx + 1);
+        const confirmPrefix = closedConfirm.filter((c) => c.closeTime <= evalBar.closeTime);
 
-      const signal =
-        input.strategyKey === "pre-event-positioning"
-          ? PreEventPositioningService.evaluate(evalInput)
-          : input.strategyKey === "post-event-momentum"
-            ? PostEventMomentumService.evaluate(evalInput)
-            : PostEventReversalService.evaluate(evalInput);
+        const evalInput: EventStrategyEvaluationInput = {
+          event: ev,
+          symbol: input.symbol,
+          market: input.market,
+          timeframe: input.timeframe,
+          confirmationTimeframe: input.confirmationTimeframe,
+          entryCandles: entryPrefix,
+          confirmationCandles: confirmPrefix,
+          observedSpreadBps: input.costs.spreadBps
+        };
+
+        const candidate =
+          input.strategyKey === "pre-event-positioning"
+            ? PreEventPositioningService.evaluate(evalInput)
+            : input.strategyKey === "post-event-momentum"
+              ? PostEventMomentumService.evaluate(evalInput)
+              : PostEventReversalService.evaluate(evalInput);
+
+        chosenSignal = candidate;
+        chosenIdx = candidateIdx;
+        if (
+          candidate.validationStatus === "approved" &&
+          candidate.direction !== "NONE" &&
+          candidate.entryPrice !== null &&
+          candidate.stopLoss !== null &&
+          candidate.targets.length > 0
+        ) {
+          break;
+        }
+      }
+
+      const signal = chosenSignal!;
+      const evalIdx = chosenIdx;
 
       if (
         signal.validationStatus !== "approved" ||

@@ -1,5 +1,5 @@
-import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
-import { db, sql } from "./index.js";
+import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { db } from "./index.js";
 import {
   aiModelConfigs,
   aiModelRuns,

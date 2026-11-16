@@ -1,4 +1,22 @@
-import { createHash } from "node:crypto";
+function envVar(name: string): string | undefined {
+  const g = globalThis as { process?: { env?: Record<string, string | undefined> } };
+  return g.process?.env?.[name];
+}
+
+export function deterministicHexHash(input: string): string {
+  // Deterministic 256-bit (64 hex chars) multi-lane hash for pure-JS core portability
+  const lanes = [0x811c9dc5, 0x9e3779b9, 0x85ebca6b, 0xc2b2ae35, 0x27d4eb2f, 0x165667b1, 0xd3a2646c, 0xfd7046c5];
+  for (let i = 0; i < input.length; i++) {
+    const code = input.charCodeAt(i);
+    for (let l = 0; l < lanes.length; l++) {
+      let h = lanes[l]! ^ (code + l * 31 + i);
+      h = Math.imul(h, 0x01000193 + l * 2);
+      h ^= h >>> 15;
+      lanes[l] = h >>> 0;
+    }
+  }
+  return lanes.map((v) => (v >>> 0).toString(16).padStart(8, "0")).join("");
+}
 
 export const UNIVERSE_CRYPTO_SYMBOLS = [
   "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
@@ -159,7 +177,7 @@ export class NewsSourceRegistryService {
   registerSource(config: NewsSourceConfig): NewsSourceConfig {
     const hasCreds =
       !config.requiresCredentials ||
-      Boolean(config.credentialEnvVar && process.env[config.credentialEnvVar]?.trim());
+      Boolean(config.credentialEnvVar && envVar(config.credentialEnvVar)?.trim());
     const effectiveStatus: NewsSourceConfig["providerStatus"] = !config.enabled
       ? "disabled"
       : config.requiresCredentials && !hasCreds
@@ -260,7 +278,7 @@ const STOP_WORDS = new Set([
 export class NewsDeduplicationService {
   static computeContentHash(sourceKey: string, title: string, summary: string, publishedAtIso: string): string {
     const normalized = `${sourceKey.toLowerCase()}|${title.toLowerCase().trim()}|${summary.toLowerCase().trim()}|${publishedAtIso.slice(0, 16)}`;
-    return createHash("sha256").update(normalized).digest("hex");
+    return deterministicHexHash(normalized);
   }
 
   static computeTitleFingerprint(title: string): string {
@@ -270,7 +288,7 @@ export class NewsDeduplicationService {
       .split(/\s+/)
       .filter((tok) => tok.length >= 3 && !STOP_WORDS.has(tok));
     const uniqueSorted = [...new Set(tokens)].sort().slice(0, 12);
-    return createHash("sha256").update(uniqueSorted.join(" ")).digest("hex");
+    return deterministicHexHash(uniqueSorted.join(" "));
   }
 
   static tokenSimilarity(titleA: string, titleB: string): number {
@@ -355,7 +373,7 @@ const MACRO_ENTITIES: Array<{
   { entityType: "central_bank", code: "BOJ", name: "Bank of Japan", regex: /\b(?:bank of japan|\bboj\b|ueda)/i },
   { entityType: "regulator", code: "SEC", name: "US Securities and Exchange Commission", regex: /\b(?:securities and exchange commission|\bsec\b)/i },
   { entityType: "regulator", code: "CFTC", name: "Commodity Futures Trading Commission", regex: /\b(?:cftc)\b/i },
-  { entityType: "currency", code: "USD", name: "US Dollar", regex: /\b(?:us dollar|u\.s\. dollar|\busd\b|greenback|treasury yields)/i },
+  { entityType: "currency", code: "USD", name: "US Dollar", regex: /\b(?:us dollar|u\.s\. dollar|\busd\b|greenback|treasury yields|us cpi|us nfp|fomc)/i },
   { entityType: "currency", code: "EUR", name: "Euro", regex: /\b(?:eurozone|\beuro\b|\beur\b)/i },
   { entityType: "currency", code: "GBP", name: "British Pound", regex: /\b(?:sterling|british pound|\bgbp\b)/i },
   { entityType: "currency", code: "JPY", name: "Japanese Yen", regex: /\b(?:japanese yen|\byen\b|\bjpy\b)/i },

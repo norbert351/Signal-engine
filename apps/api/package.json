@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@signal-engine/core": "workspace:*",
     "@signal-engine/database": "workspace:*",
     "@nestjs/common": "^11.1.0",
     "@nestjs/core": "^11.1.0",

@@ -15,6 +15,7 @@ suite("database integration", () => {
   let backtests: typeof import("./backtest-repository.js");
   let ingestion: typeof import("./ingestion-repository.js");
   let scanner: typeof import("./scanner-repository.js");
+  let intelligence: typeof import("./intelligence-repository.js");
   let sql: typeof import("./index.js").sql;
 
   beforeAll(async () => {
@@ -36,6 +37,7 @@ suite("database integration", () => {
     backtests = await import("./backtest-repository.js");
     ingestion = await import("./ingestion-repository.js");
     scanner = await import("./scanner-repository.js");
+    intelligence = await import("./intelligence-repository.js");
   }, 120_000);
 
   afterAll(async () => {
@@ -281,5 +283,173 @@ suite("database integration", () => {
     expect(dbVol.sizeBytes).toBeGreaterThan(0);
     expect(dbVol.activeConnections).toBeGreaterThanOrEqual(1);
     expect(dbVol.maxConnections).toBeGreaterThanOrEqual(10);
+  });
+
+  it("persists news articles, extracted events, global events, AI runs, event signals, outcomes, and intelligence reports while keeping all strategies disabled", async () => {
+    const eventStrategies = await intelligence.listEventStrategies();
+    expect(eventStrategies.map((s) => s.key).sort()).toEqual([
+      "post-event-momentum",
+      "post-event-reversal",
+      "pre-event-positioning"
+    ]);
+    expect(eventStrategies.every((s) => !s.enabled && !s.approved)).toBe(true);
+
+    const [tonRow] = await db.select().from(schema.instruments).where(eq(schema.instruments.symbol, "TONUSDT"));
+    expect(tonRow?.enabled).toBe(false);
+    expect(tonRow?.available).toBe(false);
+
+    const sources = await intelligence.listNewsSources();
+    expect(sources.length).toBeGreaterThanOrEqual(6);
+
+    const articleResult = await intelligence.persistNormalizedNewsArticle({
+      sourceKey: "federal_reserve_rss",
+      url: "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261116a.htm",
+      title: "Federal Reserve releases FOMC statement on inflation and interest rates",
+      summary: "Committee maintains data-dependent monetary policy stance.",
+      contentSnippet: "Inflation and labor market conditions monitored closely.",
+      publishedAt: new Date("2026-11-16T14:00:00Z"),
+      collectedAt: new Date("2026-11-16T14:00:10Z"),
+      contentHash: "hash_fomc_20261116_01",
+      titleFingerprint: "fp_fomc_20261116_01",
+      category: "central_bank_decisions",
+      importance: "high",
+      directionBias: "neutral",
+      credibilityScore: 98,
+      relevanceScore: 90,
+      entities: [{ entityType: "central_bank", canonicalName: "Federal Reserve", code: "FED", role: "primary", confidence: 95 }],
+      facts: [{ factType: "statement", statement: "FOMC statement released", exactQuantityVerified: false }],
+      affectedInstruments: [
+        { symbol: "BTCUSDT", market: "crypto_perpetual", relationshipType: "macro_driver", directionHypothesis: "neutral", relevanceScore: 85 },
+        { symbol: "EUR_USD", market: "forex", relationshipType: "macro_driver", directionHypothesis: "neutral", relevanceScore: 90 }
+      ]
+    });
+    expect(articleResult.isDuplicate).toBe(false);
+    expect(articleResult.newsEvent?.category).toBe("central_bank_decisions");
+
+    const aiSaved = await intelligence.persistAiAnalysisRun({
+      articleId: articleResult.article.id,
+      newsEventId: articleResult.newsEvent!.id,
+      providerKey: "deterministic_fallback",
+      modelName: "deterministic-reasoning-v1",
+      taskLayer: "layer2_reasoning",
+      taskKey: "news_layer2_reasoning",
+      promptVersion: "v1",
+      inputSnapshot: { articleId: articleResult.article.id },
+      outputPayload: { schemaVersion: "news-l2-v1" },
+      validation: {
+        valid: true,
+        status: "validated",
+        checksPassed: ["schema_version_valid", "source_references_present"],
+        checksFailed: [],
+        downgraded: false,
+        notes: "Valid"
+      },
+      durationMs: 12,
+      inputTokens: 120,
+      outputTokens: 180,
+      estimatedCostUsd: 0,
+      structuredFacts: [{ statement: "FOMC statement", sourceUrl: articleResult.article.url }],
+      interpretations: [{ thesis: "Macro watch", directionBias: "neutral", affectedSymbols: ["BTCUSDT", "EUR_USD"] }],
+      scenarios: [],
+      affectedAssets: [{ symbol: "BTCUSDT" }]
+    });
+    expect(aiSaved.run.validationStatus).toBe("validated");
+
+    const econEvent = await intelligence.persistNormalizedGlobalEvent({
+      dedupeKey: "US:USD:us-cpi-yoy:2026-11-16T13:30",
+      sourceKey: "official_central_bank_calendar",
+      eventType: "scheduled_economic",
+      category: "inflation_announcements",
+      eventName: "US CPI YoY",
+      country: "US",
+      currency: "USD",
+      scheduledAt: new Date("2026-11-16T13:30:00Z"),
+      publishedAt: new Date("2026-11-16T13:30:03Z"),
+      collectedAt: new Date("2026-11-16T13:30:05Z"),
+      timezone: "UTC",
+      previousValue: 3.1,
+      revisedPreviousValue: null,
+      consensusValue: 3.0,
+      actualValue: 2.8,
+      unit: "pct",
+      importance: "high",
+      status: "monitoring_reaction",
+      isScheduled: true,
+      surprise: { hasActualAndConsensus: true, surpriseValue: -0.2, surprisePct: -6.6667 },
+      verifiedEvidence: [{ sourceUrl: "https://www.bls.gov/cpi/", headline: "US CPI 2.8%", verifiedAt: "2026-11-16T13:30:03Z" }]
+    });
+    expect(econEvent.status).toBe("monitoring_reaction");
+
+    const evSignal = await intelligence.persistEventSignal({
+      dedupeKey: "evsig:test:us-cpi:BTCUSDT:15m:post-event-momentum",
+      eventId: econEvent.id,
+      strategyKey: "post-event-momentum",
+      strategyType: "post_event_momentum",
+      eventCategory: "inflation_announcements",
+      eventName: "US CPI YoY",
+      symbol: "BTCUSDT",
+      market: "crypto_perpetual",
+      timeframe: "15m",
+      confirmationTimeframe: "1h",
+      direction: "LONG",
+      actionClassification: "LONG",
+      entryPrice: 91500,
+      stopLoss: 90800,
+      targets: [92900, 93600],
+      rewardRisk: 2.0,
+      eventImportance: "high",
+      riskClassification: "MODERATE_RISK",
+      scheduledEventAt: econEvent.scheduledAt,
+      actualEventAt: econEvent.publishedAt,
+      sourceReferences: ["https://www.bls.gov/cpi/"],
+      quantitativeEvidence: { displacementAtr: 1.35 },
+      aiAnalysisId: aiSaved.analysis.id,
+      scoreBreakdown: { strategyEnabled: false, strategyApproved: false },
+      validationStatus: "approved",
+      outcomeStatus: "pending_validation",
+      estimatedSlippageBps: 5,
+      expiresAt: new Date("2026-11-16T16:30:00Z")
+    });
+    expect(evSignal.validationStatus).toBe("approved");
+    expect(evSignal.outcomeStatus).toBe("pending_validation");
+
+    const evBt = await intelligence.persistEventBacktestRun({
+      strategyKey: "post-event-momentum",
+      symbol: "BTCUSDT",
+      timeframe: "15m",
+      dataset: { eventsCount: 1 },
+      assumptions: { feeBpsPerSide: 5, spreadBps: 4, slippageBps: 3, explicit: true },
+      parameters: {},
+      metrics: { promotionClassification: "insufficient_evidence", overall: { trades: 1 } },
+      trades: [
+        {
+          eventDedupeKey: econEvent.dedupeKey,
+          symbol: "BTCUSDT",
+          strategyKey: "post-event-momentum",
+          direction: "LONG",
+          entryTimeMs: Date.parse("2026-11-16T13:45:00Z"),
+          exitTimeMs: Date.parse("2026-11-16T14:30:00Z"),
+          observedEntry: 91520,
+          exitPrice: 92900,
+          grossReturn: 0.015078,
+          netReturn: 0.013578,
+          slippageBps: 5,
+          outcome: "target_hit"
+        }
+      ]
+    });
+    expect(evBt.status).toBe("completed");
+
+    const report = await intelligence.persistIntelligenceReportRecord({
+      reportKey: "daily_summary:2026-11-16T14",
+      reportType: "daily_summary",
+      title: "Daily Market & Event Intelligence Summary",
+      summary: "Processed FOMC and US CPI events.",
+      marketRegime: "event_driven_volatility",
+      sections: [{ heading: "Events", items: [] }],
+      evidenceRefs: [{ type: "economic_event", ref: econEvent.dedupeKey }],
+      riskWarnings: ["Post-CPI volatility active"]
+    });
+    expect(report.marketRegime).toBe("event_driven_volatility");
   });
 });

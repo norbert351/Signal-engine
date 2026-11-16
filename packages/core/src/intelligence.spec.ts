@@ -428,8 +428,8 @@ describe("Engine C — Event Trading, EventRiskManager, and Chronological Event 
         eventName: "FOMC Rate Decision",
         country: "US",
         currency: "USD",
-        scheduledAt: new Date(entryCandles[35]!.closeTime - 20 * 60_000),
-        publishedAt: new Date(entryCandles[35]!.closeTime - 20 * 60_000),
+        scheduledAt: new Date(entryCandles[32]!.closeTime),
+        publishedAt: new Date(entryCandles[32]!.closeTime),
         previousValue: 5.25,
         consensusValue: 5.25,
         actualValue: 5.0

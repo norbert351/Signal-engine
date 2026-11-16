@@ -195,3 +195,32 @@ describe("Phase 5 API operational security, recovery, and health transitions", (
     expect(headers["Cache-Control"]).toBe("no-store");
   });
 });
+
+import { DocsController } from "./docs.controller.js";
+
+describe("Stage 8 — OpenAPI & 7-Section Market/Event Intelligence Dashboard", () => {
+  it("exposes all News, Events, Event Trading, AI, and Central Intelligence routes in OpenAPI and renders the 7-section dashboard", () => {
+    const docs = new DocsController();
+    const spec = docs.openapi();
+    expect(spec.paths["/news"]).toBeDefined();
+    expect(spec.paths["/news/sources"]).toBeDefined();
+    expect(spec.paths["/news/events"]).toBeDefined();
+    expect(spec.paths["/events"]).toBeDefined();
+    expect(spec.paths["/events/calendar"]).toBeDefined();
+    expect(spec.paths["/events/impact"]).toBeDefined();
+    expect(spec.paths["/event-signals"]).toBeDefined();
+    expect(spec.paths["/event-strategies"]).toBeDefined();
+    expect(spec.paths["/ai/analyses"]).toBeDefined();
+    expect(spec.paths["/intelligence"]).toBeDefined();
+    expect(spec.paths["/intelligence/reports"]).toBeDefined();
+
+    const html = docs.dashboard();
+    expect(html).toContain("1. Overview");
+    expect(html).toContain("2. News Intelligence");
+    expect(html).toContain("3. Events Calendar");
+    expect(html).toContain("4. Event Trading");
+    expect(html).toContain("5. Technical Signals");
+    expect(html).toContain("6. Intelligence Reports");
+    expect(html).toContain("7. Performance & API");
+  });
+});

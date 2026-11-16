@@ -1,14 +1,19 @@
-import { createHash } from "node:crypto";
 import type { Candle } from "./index.js";
 import { atr, emaSeries, relativeVolume } from "./indicators.js";
 import {
   ALL_UNIVERSE_SYMBOLS,
+  deterministicHexHash,
   sanitizeUntrustedArticleText,
   type DirectionBias,
   type ImportanceLevel,
   type NormalizedNewsArticle
 } from "./news-intelligence.js";
 import type { NormalizedGlobalEvent } from "./event-intelligence.js";
+
+function envVar(name: string): string | undefined {
+  const g = globalThis as { process?: { env?: Record<string, string | undefined> } };
+  return g.process?.env?.[name];
+}
 
 export type AiTaskLayer = "layer1_fast" | "layer2_reasoning";
 
@@ -367,17 +372,18 @@ export class MarketCorrelationLayer {
     const reaction1BarPct = bar1 ? Number((((bar1.close - basePrice) / basePrice) * 100).toFixed(4)) : null;
     const reaction4BarPct = bar4 ? Number((((bar4.close - basePrice) / basePrice) * 100).toFixed(4)) : null;
 
-    const atrs = atr(closed, 14);
+    const atrs = atr(closed, 14).filter((v): v is number => v !== null && Number.isFinite(v));
     const currentAtr = atrs.at(-1) ?? 0;
     const priorAtrs = atrs.slice(-15, -1);
     const avgAtr = priorAtrs.length > 0 ? priorAtrs.reduce((s, v) => s + v, 0) / priorAtrs.length : currentAtr;
     const volatilityRatio = avgAtr > 0 ? Number((currentAtr / avgAtr).toFixed(3)) : null;
 
-    const volRatioRaw = relativeVolume(closed, 20);
+    const volRatioSeries = relativeVolume(closed, 20);
+    const volRatioRaw = volRatioSeries.at(-1) ?? null;
     const volumeRatio = volRatioRaw !== null && Number.isFinite(volRatioRaw) ? Number(volRatioRaw.toFixed(3)) : null;
 
-    const emasFast = emaSeries(closed.map((c) => c.close), 10);
-    const emasSlow = emaSeries(closed.map((c) => c.close), 20);
+    const emasFast = emaSeries(closed.map((c) => c.close), 10).filter((v): v is number => v !== null);
+    const emasSlow = emaSeries(closed.map((c) => c.close), 20).filter((v): v is number => v !== null);
     const aligned =
       emasFast.length > 0 &&
       emasSlow.length > 0 &&
@@ -413,7 +419,7 @@ export class AiProviderRegistry {
       { key: "anthropic", name: "Anthropic Claude Reasoning Provider", requiresCredentials: true, credentialEnvVar: "ANTHROPIC_API_KEY" }
     ];
     return defs.map((d) => {
-      const configured = !d.requiresCredentials || Boolean(d.credentialEnvVar && process.env[d.credentialEnvVar]?.trim());
+      const configured = !d.requiresCredentials || Boolean(d.credentialEnvVar && envVar(d.credentialEnvVar)?.trim());
       return {
         ...d,
         enabled: true,
@@ -440,7 +446,7 @@ export class AiProviderRegistry {
   ): Promise<{ output: AiLayer2Output; runRecord: AiRunRecord }> {
     const started = Date.now();
     const providers = this.listProviders();
-    const preferred = options.preferredProvider ?? process.env.AI_PROVIDER ?? "deterministic_fallback";
+    const preferred = options.preferredProvider ?? envVar("AI_PROVIDER") ?? "deterministic_fallback";
     const providerObj = providers.find((p) => p.key === preferred && p.configured) ?? providers[0]!;
     const usedFallback = providerObj.key === "deterministic_fallback" && preferred !== "deterministic_fallback";
 
@@ -486,7 +492,7 @@ export class AiProviderRegistry {
         ? 0
         : Number(((inputTokens * 0.00125 + outputTokens * 0.005) / 1000).toFixed(6));
 
-    const promptVersionHash = createHash("sha256").update("news_layer2_reasoning:v1").digest("hex").slice(0, 12);
+    const promptVersionHash = deterministicHexHash("news_layer2_reasoning:v1").slice(0, 12);
 
     return {
       output,

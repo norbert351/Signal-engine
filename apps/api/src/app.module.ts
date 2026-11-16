@@ -9,6 +9,10 @@ import { BacktestsController } from "./backtests.controller.js";
 import { PaperTradesController } from "./paper-trades.controller.js";
 import { SystemController } from "./system.controller.js";
 import { DocsController } from "./docs.controller.js";
+import { NewsController } from "./news.controller.js";
+import { EventsController } from "./events.controller.js";
+import { EventTradingController } from "./event-trading.controller.js";
+import { IntelligenceController } from "./intelligence.controller.js";
 import { RateLimitGuard } from "./rate-limit.guard.js";
 import { SafeExceptionFilter } from "./security.js";
 
@@ -21,7 +25,11 @@ import { SafeExceptionFilter } from "./security.js";
     BacktestsController,
     PaperTradesController,
     SystemController,
-    DocsController
+    DocsController,
+    NewsController,
+    EventsController,
+    EventTradingController,
+    IntelligenceController
   ],
   providers: [
     { provide: APP_GUARD, useClass: RateLimitGuard },

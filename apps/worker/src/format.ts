@@ -9,7 +9,12 @@ export function redactSecretsFromText(value: string): string {
     process.env.TELEGRAM_BOT_TOKEN,
     process.env.TWELVE_DATA_API_KEY,
     process.env.ADMIN_API_KEY,
-    process.env.POSTGRES_PASSWORD
+    process.env.POSTGRES_PASSWORD,
+    process.env.OPENAI_API_KEY,
+    process.env.GEMINI_API_KEY,
+    process.env.ANTHROPIC_API_KEY,
+    process.env.CRYPTOPANIC_API_KEY,
+    process.env.NEWS_API_KEY
   ];
   for (const secret of envSecrets) {
     if (secret && secret.trim().length >= 4 && secret !== "replace-with-a-strong-password") {
@@ -84,4 +89,130 @@ export function formatLifecycleMessage(
     "Signal only. No trade has been placed."
   ];
   return lines.join("\n");
+}
+
+export function formatEventAlertMessage(input: {
+  eventName: string;
+  category: string;
+  importance: string;
+  scheduledTimeIso: string;
+  affectedInstruments: string[];
+  previousValue?: number | string | null;
+  consensusValue?: number | string | null;
+  status: string;
+  risks?: string[];
+}): string {
+  const risks = input.risks?.length
+    ? input.risks
+    : ["Increased volatility", "Wider spreads", "Uncertain directional reaction"];
+  const lines = [
+    "<b>SIGNAL ENGINE | EVENT ALERT</b>",
+    "",
+    `Event: ${escapeHtml(input.eventName)}`,
+    `Category: ${escapeHtml(input.category)}`,
+    `Importance: ${escapeHtml(input.importance)}`,
+    `Scheduled time: ${escapeHtml(input.scheduledTimeIso)}`,
+    "",
+    "Affected instruments:",
+    escapeHtml(input.affectedInstruments.join(", ") || "None"),
+    "",
+    `Previous: ${input.previousValue !== null && input.previousValue !== undefined ? escapeHtml(String(input.previousValue)) : "Unavailable"}`,
+    `Consensus: ${input.consensusValue !== null && input.consensusValue !== undefined ? escapeHtml(String(input.consensusValue)) : "Unavailable"}`,
+    "",
+    `Status: ${escapeHtml(input.status)}`,
+    "",
+    "Potential market risks:",
+    ...risks.map((r) => `- ${escapeHtml(r)}`)
+  ];
+  return lines.join("\n");
+}
+
+export function formatEventTradeMessage(input: {
+  strategyName: string;
+  eventName: string;
+  symbol: string;
+  direction: string;
+  entry: number;
+  stopLoss: number;
+  takeProfit: number;
+  rewardRisk: number | string;
+  evidence: string[];
+  riskClassification: string;
+}): string {
+  const lines = [
+    "<b>SIGNAL ENGINE | EVENT TRADE</b>",
+    "",
+    `Strategy: ${escapeHtml(input.strategyName)}`,
+    `Event: ${escapeHtml(input.eventName)}`,
+    `Instrument: ${escapeHtml(input.symbol)}`,
+    `Direction: ${escapeHtml(input.direction)}`,
+    "",
+    `Entry: ${formatPrice(input.symbol, input.entry)}`,
+    `Stop-loss: ${formatPrice(input.symbol, input.stopLoss)}`,
+    `Take-profit: ${formatPrice(input.symbol, input.takeProfit)}`,
+    `Risk/reward: ${escapeHtml(String(input.rewardRisk))}`,
+    "",
+    "Event evidence:",
+    ...input.evidence.map((item) => `- ${escapeHtml(item)}`),
+    "",
+    `Risk classification: ${escapeHtml(input.riskClassification)}`,
+    "Signal only. No trade has been placed."
+  ];
+  return lines.join("\n");
+}
+
+export function formatBreakingNewsMessage(input: {
+  headline: string;
+  sourceName: string;
+  category: string;
+  importance: string;
+  credibilityScore: number;
+  affectedSymbols: string[];
+  publishedAtIso: string;
+}): string {
+  return [
+    "<b>SIGNAL ENGINE | BREAKING NEWS</b>",
+    "",
+    `Headline: ${escapeHtml(input.headline)}`,
+    `Source: ${escapeHtml(input.sourceName)} (Credibility: ${input.credibilityScore}/100)`,
+    `Category: ${escapeHtml(input.category)} | Importance: ${escapeHtml(input.importance)}`,
+    `Published: ${escapeHtml(input.publishedAtIso)}`,
+    `Affected instruments: ${escapeHtml(input.affectedSymbols.join(", ") || "None")}`,
+    "Information only. No trade has been placed."
+  ].join("\n");
+}
+
+export function formatEventRiskWarningMessage(input: {
+  symbol: string;
+  eventName: string;
+  riskLevel: string;
+  reasons: string[];
+}): string {
+  return [
+    "<b>SIGNAL ENGINE | ELEVATED EVENT RISK</b>",
+    "",
+    `Instrument: ${escapeHtml(input.symbol)}`,
+    `Event: ${escapeHtml(input.eventName)}`,
+    `Risk level: ${escapeHtml(input.riskLevel)}`,
+    "Reasons:",
+    ...input.reasons.map((r) => `- ${escapeHtml(r)}`)
+  ].join("\n");
+}
+
+export function formatDailyIntelligenceSummaryMessage(input: {
+  title: string;
+  marketRegime: string;
+  summary: string;
+  riskWarnings: string[];
+}): string {
+  return [
+    "<b>SIGNAL ENGINE | DAILY INTELLIGENCE SUMMARY</b>",
+    "",
+    `Title: ${escapeHtml(input.title)}`,
+    `Market regime: ${escapeHtml(input.marketRegime)}`,
+    `Summary: ${escapeHtml(input.summary)}`,
+    ...(input.riskWarnings.length
+      ? ["", "Risk warnings:", ...input.riskWarnings.map((w) => `- ${escapeHtml(w)}`)]
+      : [])
+  ].join("\n");
 }
