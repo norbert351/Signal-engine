@@ -1,9 +1,28 @@
 import { formatPrice } from "@signal-engine/core";
 
+export function redactSecretsFromText(value: string): string {
+  let out = value
+    .replace(/bot\d+:[A-Za-z0-9_-]{10,}/gi, "bot[redacted]")
+    .replace(/([?&](?:apikey|api_key|token|password|secret|x-admin-api-key)=)[^&\s"']+/gi, "$1[redacted]")
+    .replace(/((?:postgres(?:ql)?|redis|rediss):\/\/[^:\s/@]+:)[^@\s"']+(@)/gi, "$1[redacted]$2");
+  const envSecrets = [
+    process.env.TELEGRAM_BOT_TOKEN,
+    process.env.TWELVE_DATA_API_KEY,
+    process.env.ADMIN_API_KEY,
+    process.env.POSTGRES_PASSWORD
+  ];
+  for (const secret of envSecrets) {
+    if (secret && secret.trim().length >= 4 && secret !== "replace-with-a-strong-password") {
+      out = out.replaceAll(secret, "[redacted]");
+    }
+  }
+  return out;
+}
+
 export function errorText(error: unknown, fallback = "unknown error"): string {
   const cause = error instanceof Error && error.cause instanceof Error ? error.cause.message : undefined;
   const raw = cause ?? (error instanceof Error ? error.message : fallback);
-  return (raw.split("\n")[0] ?? "").slice(0, 300);
+  return redactSecretsFromText((raw.split("\n")[0] ?? "").slice(0, 300));
 }
 
 export function escapeHtml(value: string): string {

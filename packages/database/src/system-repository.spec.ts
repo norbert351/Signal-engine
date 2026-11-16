@@ -14,6 +14,7 @@ suite("database integration", () => {
   let admin: typeof import("./admin-repository.js");
   let backtests: typeof import("./backtest-repository.js");
   let ingestion: typeof import("./ingestion-repository.js");
+  let scanner: typeof import("./scanner-repository.js");
   let sql: typeof import("./index.js").sql;
 
   beforeAll(async () => {
@@ -34,6 +35,7 @@ suite("database integration", () => {
     admin = await import("./admin-repository.js");
     backtests = await import("./backtest-repository.js");
     ingestion = await import("./ingestion-repository.js");
+    scanner = await import("./scanner-repository.js");
   }, 120_000);
 
   afterAll(async () => {
@@ -149,7 +151,7 @@ suite("database integration", () => {
     expect((row?.details as { reason: string }).reason).toBe("test");
   });
 
-  it("claims and resets requested backfill jobs", async () => {
+  it("claims, resets, and reclaims stale running backfill jobs", async () => {
     const start = new Date("2026-01-01T00:00:00Z");
     const end = new Date("2026-01-02T00:00:00Z");
     const requested = await admin.requestBackfill({ provider: "binance_usdm", symbol: "TESTA", timeframe: "1h", startTime: start, endTime: end });
@@ -157,6 +159,18 @@ suite("database integration", () => {
     const claimed = await ingestion.claimBackfillRequests(5);
     const job = claimed.find((item) => item.id === requested!.id);
     expect(job?.status).toBe("running");
+
+    // Simulate worker interruption leaving backfill stuck in running for >15m
+    const cursorMidpoint = new Date("2026-01-01T12:00:00Z");
+    await db
+      .update(schema.backfillProgress)
+      .set({ cursorTime: cursorMidpoint, updatedAt: new Date(Date.now() - 20 * 60_000) })
+      .where(eq(schema.backfillProgress.id, requested!.id));
+    const reclaimed = await ingestion.claimBackfillRequests(5);
+    const reclaimedJob = reclaimed.find((item) => item.id === requested!.id);
+    expect(reclaimedJob?.status).toBe("running");
+    expect(reclaimedJob?.cursorTime.getTime()).toBe(cursorMidpoint.getTime());
+
     const reset = await admin.resetBackfill(requested!.id);
     expect(reset?.status).toBe("requested");
     expect(reset?.cursorTime.getTime()).toBe(start.getTime());
@@ -226,5 +240,46 @@ suite("database integration", () => {
     [stored] = await db.select().from(schema.backtestRuns).where(eq(schema.backtestRuns.id, queued!.id));
     expect(stored?.status).toBe("completed");
     expect(stored?.metrics).toEqual({ worker: "new" });
+  });
+
+  it("deduplicates notification outbox entries and recovers interrupted sending notifications", async () => {
+    const firstCount = await scanner.enqueueNotification({
+      eventType: "TEST_ALERT",
+      eventKey: "phase5:dedupe:key",
+      message: "Test alert message",
+      destinations: ["chat-test-1"]
+    });
+    const duplicateCount = await scanner.enqueueNotification({
+      eventType: "TEST_ALERT",
+      eventKey: "phase5:dedupe:key",
+      message: "Test alert message",
+      destinations: ["chat-test-1"]
+    });
+    expect(firstCount).toBe(1);
+    expect(duplicateCount).toBe(0);
+
+    const due = await scanner.getDueNotifications(new Date(), 50);
+    const item = due.find((row) => row.destination === "chat-test-1");
+    expect(item).toBeDefined();
+
+    // While in 'sending' with future nextAttemptAt, a second worker cannot claim it
+    const concurrentDue = await scanner.getDueNotifications(new Date(), 50);
+    expect(concurrentDue.find((row) => row.id === item!.id)).toBeUndefined();
+
+    // After lease expiry (5m), an interrupted 'sending' notification is reclaimed
+    const afterLease = new Date(Date.now() + 6 * 60_000);
+    const reclaimedDue = await scanner.getDueNotifications(afterLease, 50);
+    expect(reclaimedDue.find((row) => row.id === item!.id)).toBeDefined();
+  });
+
+  it("reports backtest operational summary and database volume metrics", async () => {
+    const btSummary = await system.backtestOperationalSummary();
+    expect(btSummary.completed).toBeGreaterThanOrEqual(1);
+    expect(typeof btSummary.staleRunning).toBe("number");
+
+    const dbVol = await system.databaseVolumeSummary();
+    expect(dbVol.sizeBytes).toBeGreaterThan(0);
+    expect(dbVol.activeConnections).toBeGreaterThanOrEqual(1);
+    expect(dbVol.maxConnections).toBeGreaterThanOrEqual(10);
   });
 });

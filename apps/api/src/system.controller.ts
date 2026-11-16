@@ -12,6 +12,66 @@ import { AdminGuard } from "./admin.guard.js";
 
 const STALE_MS = Number(process.env.SYSTEM_STALE_SECONDS ?? "900") * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CRITICAL_COMPONENTS = ["database", "redis", "worker-heartbeats"] as const;
+
+export function computeOverallSystemHealth(
+  rows: Array<{ component: string; status: string; checkedAt: Date; details?: Record<string, unknown> }>,
+  now = Date.now(),
+  staleMs = STALE_MS
+) {
+  const components = rows.map((row) => {
+    const ageMs = now - new Date(row.checkedAt).getTime();
+    const isStale = ageMs > staleMs;
+    const effectiveStatus = isStale ? "stale" : row.status;
+    return {
+      ...row,
+      ageSeconds: Math.round(ageMs / 1000),
+      effectiveStatus
+    };
+  });
+
+  if (components.length === 0) {
+    return {
+      status: "degraded" as const,
+      healthState: "degraded" as const,
+      reason: "no_monitoring_records_yet",
+      components
+    };
+  }
+
+  const byComponent = new Map(components.map((row) => [row.component, row]));
+  const missingCritical = CRITICAL_COMPONENTS.filter((name) => !byComponent.has(name));
+  const criticalUnhealthy = CRITICAL_COMPONENTS.some((name) => {
+    const row = byComponent.get(name);
+    return row && (row.effectiveStatus === "error" || row.effectiveStatus === "stale");
+  });
+  const anyError = components.some((row) => row.effectiveStatus === "error");
+
+  if (criticalUnhealthy) {
+    return {
+      status: "error" as const,
+      healthState: "unhealthy" as const,
+      reason: "critical_component_unhealthy_or_stale",
+      components
+    };
+  }
+
+  const allOk = missingCritical.length === 0 && !anyError && components.every((row) => row.effectiveStatus === "ok");
+  if (allOk) {
+    return {
+      status: "ok" as const,
+      healthState: "healthy" as const,
+      components
+    };
+  }
+
+  return {
+    status: "degraded" as const,
+    healthState: "degraded" as const,
+    ...(missingCritical.length ? { missingCritical } : {}),
+    components
+  };
+}
 
 @Controller("system")
 export class SystemController {
@@ -19,17 +79,12 @@ export class SystemController {
   async health() {
     const rows = await listHealth();
     const now = Date.now();
-    const components = rows.map((row) => ({
-      ...row,
-      ageSeconds: Math.round((now - row.checkedAt.getTime()) / 1000),
-      effectiveStatus: now - row.checkedAt.getTime() > STALE_MS ? "stale" : row.status
-    }));
-    const healthy = components.length > 0 && components.every((row) => row.effectiveStatus === "ok");
+    const summary = computeOverallSystemHealth(rows, now, STALE_MS);
     return {
-      status: healthy ? "ok" : "degraded",
+      ...summary,
       api: "ok",
+      tradingExecution: false,
       staleAfterSeconds: STALE_MS / 1000,
-      components,
       checkedAt: new Date(now).toISOString()
     };
   }

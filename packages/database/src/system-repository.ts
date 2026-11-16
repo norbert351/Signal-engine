@@ -131,6 +131,57 @@ export async function backfillSummary(limit = 50) {
   return { data: rows, counts: Object.fromEntries(counts.map((row) => [row.status, Number(row.count)])) };
 }
 
+export async function backtestOperationalSummary(staleAfterMs = 15 * 60_000) {
+  const staleBefore = new Date(Date.now() - staleAfterMs).toISOString();
+  const counts = await sql<Array<{ status: string; count: number }>>`
+    SELECT status, count(*)::int AS count FROM backtest_runs GROUP BY status
+  `;
+  const [staleRow] = await sql<Array<{ count: number }>>`
+    SELECT count(*)::int AS count
+    FROM backtest_runs
+    WHERE status = 'running' AND (started_at IS NULL OR started_at <= ${staleBefore}::timestamptz)
+  `;
+  const [durationRow] = await sql<Array<{ avg_ms: number | null; max_ms: number | null }>>`
+    SELECT
+      round(avg(extract(epoch FROM (completed_at - started_at)) * 1000))::int AS avg_ms,
+      round(max(extract(epoch FROM (completed_at - started_at)) * 1000))::int AS max_ms
+    FROM (
+      SELECT started_at, completed_at
+      FROM backtest_runs
+      WHERE status = 'completed' AND started_at IS NOT NULL AND completed_at IS NOT NULL
+      ORDER BY completed_at DESC
+      LIMIT 25
+    ) recent
+  `;
+  const byStatus = Object.fromEntries(counts.map((row) => [row.status, Number(row.count)]));
+  return {
+    counts: byStatus,
+    queued: Number(byStatus.queued ?? 0),
+    running: Number(byStatus.running ?? 0),
+    completed: Number(byStatus.completed ?? 0),
+    failed: Number(byStatus.failed ?? 0),
+    staleRunning: Number(staleRow?.count ?? 0),
+    avgDurationMs: durationRow?.avg_ms !== null && durationRow?.avg_ms !== undefined ? Number(durationRow.avg_ms) : null,
+    maxDurationMs: durationRow?.max_ms !== null && durationRow?.max_ms !== undefined ? Number(durationRow.max_ms) : null
+  };
+}
+
+export async function databaseVolumeSummary() {
+  const [row] = await sql<Array<{ size_bytes: number; active_connections: number; max_connections: number }>>`
+    SELECT
+      pg_database_size(current_database())::bigint AS size_bytes,
+      (SELECT count(*)::int FROM pg_stat_activity WHERE datname = current_database()) AS active_connections,
+      current_setting('max_connections')::int AS max_connections
+  `;
+  const sizeBytes = Number(row?.size_bytes ?? 0);
+  return {
+    sizeBytes,
+    sizeMb: Number((sizeBytes / 1024 ** 2).toFixed(2)),
+    activeConnections: Number(row?.active_connections ?? 0),
+    maxConnections: Number(row?.max_connections ?? 100)
+  };
+}
+
 export async function latestComponentHealth(component: string) {
   const [row] = await db.select().from(systemHealth).where(eq(systemHealth.component, component)).limit(1);
   return row;

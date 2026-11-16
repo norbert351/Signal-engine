@@ -1,6 +1,8 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import { db } from "./index.js";
 import { backfillProgress, candles, instruments } from "./schema.js";
+
+const STALE_BACKFILL_MS = Number(process.env.STALE_BACKFILL_MS ?? String(15 * 60_000));
 
 export async function ensureInstrument(
   provider: string,
@@ -140,8 +142,14 @@ export async function updateBackfill(id: string, patch: { cursorTime?: Date; sta
     .where(eq(backfillProgress.id, id));
 }
 
-export async function claimBackfillRequests(limit = 2) {
+export async function claimBackfillRequests(limit = 2, staleAfterMs = STALE_BACKFILL_MS) {
   return db.transaction(async (tx) => {
+    const staleCutoff = new Date(Date.now() - staleAfterMs);
+    await tx
+      .update(backfillProgress)
+      .set({ status: "requested", updatedAt: new Date() })
+      .where(and(eq(backfillProgress.status, "running"), lte(backfillProgress.updatedAt, staleCutoff)));
+
     const rows = await tx
       .select()
       .from(backfillProgress)
