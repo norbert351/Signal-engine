@@ -1,6 +1,6 @@
 import { type Candle, type Direction, onlyClosedCandles, rewardRisk, validateSignalLevels } from "./index.js";
 import { atr, emaSeries, relativeVolume } from "./indicators.js";
-import type { NormalizedGlobalEvent } from "./event-intelligence.js";
+import { EventNormalizationService, type NormalizedGlobalEvent } from "./event-intelligence.js";
 
 export type EventStrategyKey = "pre-event-positioning" | "post-event-momentum" | "post-event-reversal";
 export type EventActionClassification = "LONG" | "SHORT" | "NO_TRADE" | "WATCH" | "HIGH_RISK";
@@ -25,6 +25,7 @@ export type EventRiskPolicy = {
   maxDataDelayMs: number;
   preEventBlackoutMinutes: number;
   postEventObservationMinutes: number;
+  maxPostEventWindowMinutes: number;
   maxConcurrentEventSignals: number;
   minimumRewardRisk: number;
   maximumStopDistancePct: number;
@@ -38,6 +39,7 @@ export const DEFAULT_EVENT_RISK_POLICY: EventRiskPolicy = {
   maxDataDelayMs: 15 * 60_000,
   preEventBlackoutMinutes: 15,
   postEventObservationMinutes: 5,
+  maxPostEventWindowMinutes: 180,
   maxConcurrentEventSignals: 3,
   minimumRewardRisk: 2.0,
   maximumStopDistancePct: 4.0
@@ -139,6 +141,8 @@ export class EventRiskManager {
         const minutesSinceRelease = (input.evaluationTimeMs - input.actualEventMs) / 60_000;
         if (minutesSinceRelease < policy.postEventObservationMinutes) {
           reasons.push("post_event_observation_period_active");
+        } else if (minutesSinceRelease > policy.maxPostEventWindowMinutes) {
+          reasons.push("post_event_window_expired");
         }
       }
     }
@@ -302,7 +306,8 @@ export class PreEventPositioningService {
       };
     }
 
-    const scheduledMs = input.event.scheduledAt?.getTime() ?? null;
+    const maskedEvent = EventNormalizationService.maskEventAsOf(input.event, metrics.lastEntry.closeTime);
+    const scheduledMs = maskedEvent.scheduledAt?.getTime() ?? null;
     const risk = EventRiskManager.evaluate({
       strategyType: "pre_event",
       symbol: input.symbol,
@@ -317,7 +322,7 @@ export class PreEventPositioningService {
       observedGapPct: metrics.observedGapPct,
       conflictingSources: input.conflictingSources ?? false,
       activeEventSignalsCount: input.activeEventSignalsCount ?? 0,
-      policy: { maxVolatilityRatio: 1.6, ...(input.riskPolicy ?? {}) }
+      policy: { maxVolatilityRatio: 1.6, maximumStopDistancePct: 3.5, ...(input.riskPolicy ?? {}) }
     });
 
     if (!risk.allowed) {
@@ -350,7 +355,7 @@ export class PreEventPositioningService {
     }
 
     const minutesToEvent = scheduledMs ? (scheduledMs - metrics.lastEntry.closeTime) / 60_000 : 999;
-    if (minutesToEvent > 240 || metrics.htfTrend === "RANGE") {
+    if (minutesToEvent < 30 || minutesToEvent > 240 || metrics.htfTrend === "RANGE") {
       return {
         strategyKey: "pre-event-positioning",
         strategyType: "pre_event",
@@ -358,7 +363,7 @@ export class PreEventPositioningService {
         market: input.market,
         timeframe: input.timeframe,
         confirmationTimeframe: input.confirmationTimeframe,
-        actionClassification: minutesToEvent <= 240 ? "WATCH" : "NO_TRADE",
+        actionClassification: minutesToEvent >= 30 && minutesToEvent <= 240 ? "WATCH" : "NO_TRADE",
         direction: "NONE",
         entryPrice: null,
         stopLoss: null,
@@ -382,9 +387,40 @@ export class PreEventPositioningService {
     const direction: Direction = metrics.htfTrend;
     const entry = metrics.lastEntry.close;
     const stopDistance = metrics.currentAtr * 1.5;
+    const stopDistancePct = entry > 0 ? (stopDistance / entry) * 100 : 999;
+    const maxStopPct = input.riskPolicy?.maximumStopDistancePct ?? 3.5;
     const stopLoss = direction === "LONG" ? entry - stopDistance : entry + stopDistance;
     const t1 = direction === "LONG" ? entry + stopDistance * 2.0 : entry - stopDistance * 2.0;
     const t2 = direction === "LONG" ? entry + stopDistance * 3.0 : entry - stopDistance * 3.0;
+    const check = validateSignalLevels(direction, entry, stopLoss, [t1, t2], input.riskPolicy?.minimumRewardRisk ?? 2.0);
+
+    if (!check.valid || stopDistancePct > maxStopPct) {
+      const rejectReason = stopDistancePct > maxStopPct ? "stop_distance_exceeds_maximum_pct" : check.reasons.join(",");
+      return {
+        strategyKey: "pre-event-positioning",
+        strategyType: "pre_event",
+        symbol: input.symbol,
+        market: input.market,
+        timeframe: input.timeframe,
+        confirmationTimeframe: input.confirmationTimeframe,
+        actionClassification: "NO_TRADE",
+        direction: "NONE",
+        entryPrice: null,
+        stopLoss: null,
+        targets: [],
+        rewardRisk: null,
+        riskClassification: "BLOCKED",
+        validationStatus: "rejected",
+        outcomeStatus: "rejected",
+        rejectionReason: rejectReason,
+        triggerCloseTime: metrics.lastEntry.closeTime,
+        expiresAtMs: scheduledMs ?? metrics.lastEntry.closeTime + 30 * 60_000,
+        estimatedSlippageBps: risk.estimatedSlippageBps,
+        quantitativeEvidence: { stopDistancePct: Number(stopDistancePct.toFixed(4)) },
+        rationale: [rejectReason]
+      };
+    }
+
     const rr = rewardRisk(direction, entry, stopLoss, t1);
 
     return {
@@ -410,10 +446,11 @@ export class PreEventPositioningService {
         minutesToEvent: Math.round(minutesToEvent),
         htfTrend: metrics.htfTrend,
         volatilityRatio: Number(metrics.volatilityRatio.toFixed(3)),
-        consensusKnown: input.event.consensusValue !== null
+        consensusKnown: maskedEvent.consensusValue !== null,
+        actualMasked: maskedEvent.actualValue === null
       },
       rationale: [
-        `Pre-event ${direction} positioning aligned with ${input.confirmationTimeframe} trend ${Math.round(minutesToEvent)}m prior to ${input.event.eventName}.`,
+        `Pre-event ${direction} positioning aligned with ${input.confirmationTimeframe} trend ${Math.round(minutesToEvent)}m prior to ${maskedEvent.eventName}.`,
         "Outcome of upcoming announcement is unknown; strict pre-event stop and blackout expiry enforced."
       ]
     };
@@ -455,12 +492,18 @@ export class PostEventMomentumService {
       };
     }
 
-    const actualEventMs = (input.event.publishedAt ?? input.event.scheduledAt)?.getTime() ?? null;
+    const maskedEvent = EventNormalizationService.maskEventAsOf(input.event, metrics.lastEntry.closeTime);
+    const rawReleaseMs = (maskedEvent.publishedAt ?? maskedEvent.scheduledAt)?.getTime() ?? null;
+    const actualEventMs =
+      rawReleaseMs !== null
+        ? maskedEvent.publishedAt && maskedEvent.collectedAt.getTime() > rawReleaseMs
+          ? maskedEvent.collectedAt.getTime()
+          : rawReleaseMs
+        : null;
     const hasReleased =
-      input.event.actualValue !== null ||
-      !input.event.isScheduled ||
-      input.event.status === "released" ||
-      input.event.status === "monitoring_reaction";
+      actualEventMs !== null &&
+      metrics.lastEntry.closeTime >= actualEventMs &&
+      (maskedEvent.actualValue !== null || !maskedEvent.isScheduled);
 
     const risk = EventRiskManager.evaluate({
       strategyType: "post_event_momentum",
@@ -476,7 +519,7 @@ export class PostEventMomentumService {
       observedGapPct: metrics.observedGapPct,
       conflictingSources: input.conflictingSources ?? false,
       activeEventSignalsCount: input.activeEventSignalsCount ?? 0,
-      ...(input.riskPolicy ? { policy: input.riskPolicy } : {})
+      policy: { maxPostEventWindowMinutes: 120, ...(input.riskPolicy ?? {}) }
     });
 
     if (!risk.allowed) {
@@ -611,11 +654,14 @@ export class PostEventMomentumService {
         ? Math.min(metrics.lastEntry.low, entry - metrics.currentAtr * 1.5)
         : Math.max(metrics.lastEntry.high, entry + metrics.currentAtr * 1.5);
     const riskDist = Math.abs(entry - structuralStop);
+    const stopDistancePct = entry > 0 ? (riskDist / entry) * 100 : 999;
+    const maxStopPct = input.riskPolicy?.maximumStopDistancePct ?? 4.0;
     const t1 = direction === "LONG" ? entry + riskDist * 2.0 : entry - riskDist * 2.0;
     const t2 = direction === "LONG" ? entry + riskDist * 3.0 : entry - riskDist * 3.0;
-    const check = validateSignalLevels(direction, entry, structuralStop, [t1, t2], 2.0);
+    const check = validateSignalLevels(direction, entry, structuralStop, [t1, t2], input.riskPolicy?.minimumRewardRisk ?? 2.0);
 
-    if (!check.valid) {
+    if (!check.valid || stopDistancePct > maxStopPct) {
+      const rejectReason = stopDistancePct > maxStopPct ? "stop_distance_exceeds_maximum_pct" : check.reasons.join(",");
       return {
         strategyKey: "post-event-momentum",
         strategyType: "post_event_momentum",
@@ -632,12 +678,12 @@ export class PostEventMomentumService {
         riskClassification: risk.riskClassification,
         validationStatus: "rejected",
         outcomeStatus: "rejected",
-        rejectionReason: check.reasons.join(","),
+        rejectionReason: rejectReason,
         triggerCloseTime: metrics.lastEntry.closeTime,
         expiresAtMs: metrics.lastEntry.closeTime + 60 * 60_000,
         estimatedSlippageBps: risk.estimatedSlippageBps,
-        quantitativeEvidence: {},
-        rationale: check.reasons
+        quantitativeEvidence: { stopDistancePct: Number(stopDistancePct.toFixed(4)) },
+        rationale: [rejectReason]
       };
     }
 
@@ -709,12 +755,18 @@ export class PostEventReversalService {
       };
     }
 
-    const actualEventMs = (input.event.publishedAt ?? input.event.scheduledAt)?.getTime() ?? null;
+    const maskedEvent = EventNormalizationService.maskEventAsOf(input.event, metrics.lastEntry.closeTime);
+    const rawReleaseMs = (maskedEvent.publishedAt ?? maskedEvent.scheduledAt)?.getTime() ?? null;
+    const actualEventMs =
+      rawReleaseMs !== null
+        ? maskedEvent.publishedAt && maskedEvent.collectedAt.getTime() > rawReleaseMs
+          ? maskedEvent.collectedAt.getTime()
+          : rawReleaseMs
+        : null;
     const hasReleased =
-      input.event.actualValue !== null ||
-      !input.event.isScheduled ||
-      input.event.status === "released" ||
-      input.event.status === "monitoring_reaction";
+      actualEventMs !== null &&
+      metrics.lastEntry.closeTime >= actualEventMs &&
+      (maskedEvent.actualValue !== null || !maskedEvent.isScheduled);
 
     const risk = EventRiskManager.evaluate({
       strategyType: "post_event_reversal",
@@ -730,7 +782,7 @@ export class PostEventReversalService {
       observedGapPct: metrics.observedGapPct,
       conflictingSources: input.conflictingSources ?? false,
       activeEventSignalsCount: input.activeEventSignalsCount ?? 0,
-      policy: { postEventObservationMinutes: 15, ...(input.riskPolicy ?? {}) }
+      policy: { postEventObservationMinutes: 15, maxPostEventWindowMinutes: 180, ...(input.riskPolicy ?? {}) }
     });
 
     if (!risk.allowed) {
@@ -807,8 +859,39 @@ export class PostEventReversalService {
         ? bar.low - metrics.currentAtr * 0.25
         : bar.high + metrics.currentAtr * 0.25;
     const riskDist = Math.abs(entry - stopLoss);
+    const stopDistancePct = entry > 0 ? (riskDist / entry) * 100 : 999;
+    const maxStopPct = input.riskPolicy?.maximumStopDistancePct ?? 4.0;
     const t1 = direction === "LONG" ? entry + riskDist * 2.0 : entry - riskDist * 2.0;
     const t2 = direction === "LONG" ? entry + riskDist * 3.0 : entry - riskDist * 3.0;
+    const check = validateSignalLevels(direction, entry, stopLoss, [t1, t2], input.riskPolicy?.minimumRewardRisk ?? 2.0);
+
+    if (!check.valid || stopDistancePct > maxStopPct) {
+      const rejectReason = stopDistancePct > maxStopPct ? "stop_distance_exceeds_maximum_pct" : check.reasons.join(",");
+      return {
+        strategyKey: "post-event-reversal",
+        strategyType: "post_event_reversal",
+        symbol: input.symbol,
+        market: input.market,
+        timeframe: input.timeframe,
+        confirmationTimeframe: input.confirmationTimeframe,
+        actionClassification: "NO_TRADE",
+        direction: "NONE",
+        entryPrice: null,
+        stopLoss: null,
+        targets: [],
+        rewardRisk: null,
+        riskClassification: "BLOCKED",
+        validationStatus: "rejected",
+        outcomeStatus: "rejected",
+        rejectionReason: rejectReason,
+        triggerCloseTime: bar.closeTime,
+        expiresAtMs: bar.closeTime + 60 * 60_000,
+        estimatedSlippageBps: risk.estimatedSlippageBps,
+        quantitativeEvidence: { stopDistancePct: Number(stopDistancePct.toFixed(4)) },
+        rationale: [rejectReason]
+      };
+    }
+
     const rr = rewardRisk(direction, entry, stopLoss, t1);
 
     return {
@@ -837,7 +920,7 @@ export class PostEventReversalService {
         htfTrend: metrics.htfTrend
       },
       rationale: [
-        `Post-event spike exhaustion reversal (${direction}) after ${input.event.eventName}.`,
+        `Post-event spike exhaustion reversal (${direction}) after ${maskedEvent.eventName}.`,
         `Spike=${spikeAtr.toFixed(2)}x ATR with ${(Math.max(upperWickRatio, lowerWickRatio) * 100).toFixed(1)}% rejection wick.`
       ]
     };
@@ -903,13 +986,19 @@ export class EventBacktestService {
     let eligibleEvents = 0;
     let signalsGenerated = 0;
     let rejectedSetups = 0;
+    let ambiguousBarsCount = 0;
     let lastTradeExitMs = 0;
 
     for (const ev of sortedEvents) {
+      const releaseAnchorMs = (ev.publishedAt ?? ev.scheduledAt ?? ev.collectedAt).getTime();
+      const effectiveAvailableMs =
+        ev.publishedAt && ev.collectedAt.getTime() > releaseAnchorMs
+          ? ev.collectedAt.getTime()
+          : releaseAnchorMs;
       const eventTriggerMs =
         input.strategyKey === "pre-event-positioning"
           ? (ev.scheduledAt?.getTime() ?? 0) - 60 * 60_000
-          : (ev.publishedAt ?? ev.scheduledAt ?? ev.collectedAt).getTime() + 15 * 60_000;
+          : effectiveAvailableMs + 15 * 60_000;
 
       const startEvalIdx = closedEntry.findIndex((c) => c.closeTime >= eventTriggerMs);
       if (startEvalIdx < 30 || startEvalIdx >= closedEntry.length - 1) continue;
@@ -922,11 +1011,13 @@ export class EventBacktestService {
       for (let candidateIdx = startEvalIdx; candidateIdx <= maxSearchIdx; candidateIdx++) {
         const evalBar = closedEntry[candidateIdx]!;
         // Prevent lookahead: pass only candles closed on or before evalBar.closeTime
+        // and mask event fields as of evalBar.closeTime
         const entryPrefix = closedEntry.slice(0, candidateIdx + 1);
         const confirmPrefix = closedConfirm.filter((c) => c.closeTime <= evalBar.closeTime);
+        const maskedEvent = EventNormalizationService.maskEventAsOf(ev, evalBar.closeTime);
 
         const evalInput: EventStrategyEvaluationInput = {
-          event: ev,
+          event: maskedEvent,
           symbol: input.symbol,
           market: input.market,
           timeframe: input.timeframe,
@@ -996,6 +1087,10 @@ export class EventBacktestService {
         const stopHit = signal.direction === "LONG" ? bar.low <= stopLoss : bar.high >= stopLoss;
         const targetHit = signal.direction === "LONG" ? bar.high >= target1 : bar.low <= target1;
 
+        if (stopHit && targetHit) {
+          ambiguousBarsCount += 1;
+        }
+
         // Conservative stop-first handling + gap-aware stop execution
         if (stopHit) {
           exitPrice = signal.direction === "LONG" ? Math.min(stopLoss, bar.open) : Math.max(stopLoss, bar.open);
@@ -1011,6 +1106,10 @@ export class EventBacktestService {
         }
         exitPrice = bar.close;
         exitTimeMs = bar.closeTime;
+        if (bar.closeTime >= signal.expiresAtMs) {
+          outcome = "expired";
+          break;
+        }
       }
 
       lastTradeExitMs = exitTimeMs;
@@ -1114,6 +1213,7 @@ export class EventBacktestService {
       eligibleEvents,
       signalsGenerated,
       rejectedSetups,
+      ambiguousBarsCount,
       overall,
       train,
       validation,

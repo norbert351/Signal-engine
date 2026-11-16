@@ -24,6 +24,8 @@ import {
   PostEventMomentumService,
   PostEventReversalService,
   PreEventPositioningService,
+  RssFeedParser,
+  parseEventTimestampToUtc,
   sanitizeUntrustedArticleText
 } from "./index.js";
 
@@ -517,5 +519,140 @@ describe("Central Intelligence & 7-Dimension Evidence Fusion", () => {
     );
     expect(invalidQuantCtx.quantitativeAuthorityApproved).toBe(false);
     expect(invalidQuantCtx.recommendation).toBe("REJECT_DETERMINISTIC_EVENT_BLACKOUT");
+  });
+
+  it("audits numeric/polarity deduplication, RSS XML parsing, base/quote macro bias, 6 AI fallback triggers, timezone conversion, post-event window expiry, and missing evidence defaults", async () => {
+    // 1. Numeric & polarity deduplication regression check
+    const cpi31 = NewsDeduplicationService.computeTitleFingerprint("US CPI inflation rate rises 3.1% YoY");
+    const cpi49 = NewsDeduplicationService.computeTitleFingerprint("US CPI inflation rate rises 4.9% YoY");
+    expect(cpi31).not.toBe(cpi49);
+
+    const dupNumericCheck = NewsDeduplicationService.checkDuplicate(
+      {
+        title: "US CPI inflation rate rises 4.9% YoY in October",
+        contentHash: "h2",
+        titleFingerprint: cpi49,
+        publishedAt: new Date("2026-11-15T12:30:00.000Z")
+      },
+      [
+        {
+          id: "art-1",
+          title: "US CPI inflation rate rises 3.1% YoY in October",
+          contentHash: "h1",
+          titleFingerprint: cpi31,
+          publishedAt: new Date("2026-11-15T12:00:00.000Z")
+        }
+      ]
+    );
+    expect(dupNumericCheck.isDuplicate).toBe(false);
+
+    const dupPolarityCheck = NewsDeduplicationService.checkDuplicate(
+      {
+        title: "US SEC officially rejects spot Bitcoin ETF filing",
+        contentHash: "h4",
+        titleFingerprint: NewsDeduplicationService.computeTitleFingerprint("US SEC officially rejects spot Bitcoin ETF filing"),
+        publishedAt: new Date("2026-11-15T12:10:00.000Z")
+      },
+      [
+        {
+          id: "art-2",
+          title: "US SEC officially approves spot Bitcoin ETF filing",
+          contentHash: "h3",
+          titleFingerprint: NewsDeduplicationService.computeTitleFingerprint("US SEC officially approves spot Bitcoin ETF filing"),
+          publishedAt: new Date("2026-11-15T12:00:00.000Z")
+        }
+      ]
+    );
+    expect(dupPolarityCheck.isDuplicate).toBe(false);
+
+    // 2. RSS XML parser + USD_JPY vs EUR_USD base/quote directional mapping
+    const rssXml = `<rss><channel><item><title><![CDATA[Federal Reserve announces 25 basis points rate hike; hawkish statement]]></title><link>https://www.federalreserve.gov/newsevents/pressreleases/monetary20261115a.htm</link><pubDate>Sun, 15 Nov 2026 14:00:00 GMT</pubDate><description>FOMC raises target range.</description></item></channel></rss>`;
+    const parsedRss = RssFeedParser.parseFeedXml(rssXml, "federal_reserve_rss", new Date("2026-11-15T14:01:00.000Z"));
+    expect(parsedRss).toHaveLength(1);
+    const newsSvc = new NewsIntelligenceService();
+    const fedArticle = newsSvc.normalizeArticle(parsedRss[0]!);
+    const eurUsdMap = fedArticle.affectedInstruments.find((i) => i.symbol === "EUR_USD");
+    const usdJpyMap = fedArticle.affectedInstruments.find((i) => i.symbol === "USD_JPY");
+    expect(eurUsdMap?.directionHypothesis).toBe("bearish");
+    expect(usdJpyMap?.directionHypothesis).toBe("bullish");
+
+    // 3. All 6 AI deterministic fallback triggers:
+    // (a) Missing credentials, (b) Provider error, (c) Timeout, (d) Malformed JSON, (e) Unsupported claim, (f) Limit exceeded
+    process.env.OPENAI_API_KEY = "sk-test-mock-key-only";
+    try {
+      const malformedRes = await AiProviderRegistry.runLayer2Analysis([fedArticle], undefined, {
+        preferredProvider: "openai",
+        maxRetries: 0,
+        evaluationTimeMs: Date.parse("2026-11-15T14:05:00.000Z"),
+        customInvoker: async () => "{ malformed json response"
+      });
+      expect(malformedRes.runRecord.providerKey).toBe("deterministic_fallback");
+      expect(malformedRes.runRecord.usedFallback).toBe(true);
+
+      const unsupportedClaimRes = await AiProviderRegistry.runLayer2Analysis([fedArticle], undefined, {
+        preferredProvider: "openai",
+        maxRetries: 0,
+        evaluationTimeMs: Date.parse("2026-11-15T14:05:00.000Z"),
+        customInvoker: async () => ({
+          schemaVersion: "news-l2-v1",
+          observedFacts: [
+            {
+              statement: "Federal Reserve hiked rates by 75 bps to 9.5%",
+              sourceUrl: fedArticle.url,
+              timestampIso: fedArticle.publishedAt.toISOString()
+            }
+          ],
+          interpretations: [{ thesis: "Hallucinated figure", directionBias: "bearish", affectedSymbols: ["EUR_USD"] }],
+          possibleScenarios: [],
+          contradictionsDetected: false,
+          eventRiskLevel: "elevated",
+          macroContextSummary: "Hallucinated summary"
+        })
+      });
+      expect(unsupportedClaimRes.runRecord.providerKey).toBe("deterministic_fallback");
+      expect(unsupportedClaimRes.runRecord.usedFallback).toBe(true);
+      expect(unsupportedClaimRes.runRecord.errorMessage).toContain("unsupported_numeric_claim");
+
+      const limitExceededRes = await AiProviderRegistry.runLayer2Analysis([fedArticle], undefined, {
+        preferredProvider: "openai",
+        maxInputTokens: 2,
+        evaluationTimeMs: Date.parse("2026-11-15T14:05:00.000Z"),
+        customInvoker: async () => AdvancedReasoningLayer.synthesize([fedArticle])
+      });
+      expect(limitExceededRes.runRecord.providerKey).toBe("deterministic_fallback");
+      expect(limitExceededRes.runRecord.usedFallback).toBe(true);
+      expect(limitExceededRes.runRecord.errorMessage).toContain("token limit exceeded");
+    } finally {
+      delete process.env.OPENAI_API_KEY;
+    }
+
+    // 4. Timezone conversion & post-event window expiry
+    const estDate = parseEventTimestampToUtc("2026-11-16T08:30:00", "EST");
+    expect(estDate?.toISOString()).toBe("2026-11-16T13:30:00.000Z");
+
+    const expiredPostEventRisk = EventRiskManager.evaluate({
+      strategyType: "post_event_momentum",
+      symbol: "BTCUSDT",
+      market: "crypto_perpetual",
+      instrumentAvailable: true,
+      evaluationTimeMs: Date.parse("2026-11-16T18:00:00.000Z"),
+      latestCandleCloseMs: Date.parse("2026-11-16T18:00:00.000Z"),
+      actualEventMs: Date.parse("2026-11-16T12:00:00.000Z"), // 360 minutes ago (> 180m max window)
+      observedSpreadBps: 5,
+      volatilityRatio: 1.2,
+      volumeRatio: 1.3,
+      observedGapPct: 0.1,
+      conflictingSources: false,
+      activeEventSignalsCount: 0
+    });
+    expect(expiredPostEventRisk.allowed).toBe(false);
+    expect(expiredPostEventRisk.rejectionReasons).toContain("post_event_window_expired");
+
+    // 5. Missing evidence defaults to 0 (never silently positive) & multi-article conflict detection
+    const emptyDims = CentralIntelligenceService.computeEvidenceDimensions({});
+    expect(emptyDims.sourceCredibility).toBe(0);
+    expect(emptyDims.technicalSetupQuality).toBe(0);
+    expect(emptyDims.marketConfirmation).toBe(0);
+    expect(emptyDims.directionalEvidence).toBe(0);
   });
 });

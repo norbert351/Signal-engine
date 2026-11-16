@@ -80,6 +80,7 @@ export type SignalFusionContext = {
 
 export class CentralIntelligenceService {
   static computeEvidenceDimensions(input: {
+    symbol?: string;
     articles?: NormalizedNewsArticle[];
     events?: NormalizedGlobalEvent[];
     technicalQualityScore?: number;
@@ -111,26 +112,53 @@ export class CentralIntelligenceService {
     let dirSum = 0;
     let dirCount = 0;
     let hasConflict = false;
+    let seenBullish = false;
+    let seenBearish = false;
+
     for (const a of articles) {
-      if (a.directionBias === "conflicting") hasConflict = true;
-      else if (a.directionBias === "bullish") {
+      const mapped = input.symbol ? a.affectedInstruments.find((inst) => inst.symbol === input.symbol) : undefined;
+      const bias = mapped ? mapped.directionHypothesis : a.directionBias;
+      if (bias === "conflicting") hasConflict = true;
+      else if (bias === "bullish") {
+        seenBullish = true;
         dirSum += 75;
         dirCount += 1;
-      } else if (a.directionBias === "bearish") {
+      } else if (bias === "bearish") {
+        seenBearish = true;
         dirSum -= 75;
         dirCount += 1;
       }
     }
     for (const ev of events) {
       if (ev.surprise.hasActualAndConsensus) {
+        const isUsdHawkishPrint =
+          ev.currency === "USD" &&
+          (ev.category === "inflation_announcements" || ev.category === "central_bank_decisions");
+        const usdIsQuote =
+          input.symbol !== undefined &&
+          (input.symbol === "EUR_USD" ||
+            input.symbol === "GBP_USD" ||
+            input.symbol === "XAU_USD" ||
+            input.symbol.endsWith("USDT"));
+        const invertForSymbol = isUsdHawkishPrint && usdIsQuote;
+
         if (ev.surprise.direction === "above_consensus") {
-          dirSum += 80;
+          const score = invertForSymbol ? -80 : 80;
+          if (score > 0) seenBullish = true;
+          else seenBearish = true;
+          dirSum += score;
           dirCount += 1;
         } else if (ev.surprise.direction === "below_consensus") {
-          dirSum -= 80;
+          const score = invertForSymbol ? 80 : -80;
+          if (score > 0) seenBullish = true;
+          else seenBearish = true;
+          dirSum += score;
           dirCount += 1;
         }
       }
+    }
+    if (seenBullish && seenBearish) {
+      hasConflict = true;
     }
     const directionalEvidence = hasConflict ? 0 : dirCount > 0 ? Math.max(-100, Math.min(100, Math.round(dirSum / dirCount))) : 0;
 
@@ -154,7 +182,7 @@ export class CentralIntelligenceService {
       newsRelevance,
       directionalEvidence,
       technicalSetupQuality: Math.max(0, Math.min(100, Math.round(input.technicalQualityScore ?? 0))),
-      marketConfirmation: Math.max(0, Math.min(100, Math.round(input.marketConfirmationScore ?? 50))),
+      marketConfirmation: Math.max(0, Math.min(100, Math.round(input.marketConfirmationScore ?? 0))),
       eventRisk,
       formulaVersion: "evidence-7d-v1",
       calibrationNote: EVIDENCE_FORMULA_SPEC.disclaimer
@@ -180,6 +208,7 @@ export class CentralIntelligenceService {
     );
 
     const dimensions = this.computeEvidenceDimensions({
+      symbol: signal.symbol,
       articles: symbolArticles,
       events: symbolEvents,
       technicalQualityScore: signal.qualityScore,

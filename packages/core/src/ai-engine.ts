@@ -90,6 +90,7 @@ export class DeterministicValidationLayer {
       evaluationTimeMs?: number;
       maxArticleAgeMs?: number;
       rawInputText?: string;
+      allowedSourceUrls?: string[];
     } = {}
   ): AiValidationResult {
     const checksPassed: string[] = [];
@@ -122,6 +123,31 @@ export class DeterministicValidationLayer {
       );
       if (allHaveSources) checksPassed.push("source_references_present");
       else checksFailed.push("missing_or_invalid_source_references");
+
+      if (options.allowedSourceUrls && options.allowedSourceUrls.length > 0) {
+        const allowedSet = new Set(options.allowedSourceUrls.map((u) => u.trim()));
+        const urlsVerified = output.observedFacts.every((f) => allowedSet.has((f.sourceUrl ?? "").trim()));
+        if (urlsVerified) checksPassed.push("fact_sources_match_inputs");
+        else checksFailed.push("unsupported_source_url_claim");
+      }
+
+      if (options.rawInputText) {
+        const inputNums = new Set(options.rawInputText.toLowerCase().match(/\b\d+(?:\.\d+)?%\b|\b\d+\s*(?:bps|basis points)\b/g) ?? []);
+        let hasUnsupportedNumericClaim = false;
+        for (const fact of output.observedFacts) {
+          const claimedNums = (fact.statement ?? "").toLowerCase().match(/\b\d+(?:\.\d+)?%\b|\b\d+\s*(?:bps|basis points)\b/g) ?? [];
+          for (const claimed of claimedNums) {
+            if (!inputNums.has(claimed)) {
+              hasUnsupportedNumericClaim = true;
+            }
+          }
+        }
+        if (hasUnsupportedNumericClaim) {
+          checksFailed.push("unsupported_numeric_claim");
+        } else {
+          checksPassed.push("numeric_claims_verified");
+        }
+      }
 
       const timestampsValid = output.observedFacts.every((fact) => {
         const ts = Date.parse(fact.timestampIso);
@@ -171,7 +197,11 @@ export class DeterministicValidationLayer {
       "invalid_schema_version",
       "missing_observed_facts",
       "missing_or_invalid_source_references",
-      "invalid_market_symbol_reference"
+      "invalid_market_symbol_reference",
+      "unsupported_source_url_claim",
+      "unsupported_numeric_claim",
+      "missing_interpretations_or_scenarios",
+      "missing_required_risk_or_summary_fields"
     ]);
     const isRejected = checksFailed.some((reason) => hardRejectReasons.has(reason));
 
@@ -440,15 +470,20 @@ export class AiProviderRegistry {
     options: {
       preferredProvider?: string;
       timeoutMs?: number;
+      maxRetries?: number;
+      maxInputTokens?: number;
+      maxCostUsd?: number;
       evaluationTimeMs?: number;
-      customInvoker?: (providerKey: string, payload: unknown) => Promise<AiLayer2Output>;
+      customInvoker?: (providerKey: string, payload: unknown) => Promise<AiLayer2Output | string>;
     } = {}
   ): Promise<{ output: AiLayer2Output; runRecord: AiRunRecord }> {
     const started = Date.now();
     const providers = this.listProviders();
     const preferred = options.preferredProvider ?? envVar("AI_PROVIDER") ?? "deterministic_fallback";
-    const providerObj = providers.find((p) => p.key === preferred && p.configured) ?? providers[0]!;
-    const usedFallback = providerObj.key === "deterministic_fallback" && preferred !== "deterministic_fallback";
+    const candidateProvider = providers.find((p) => p.key === preferred && p.configured);
+    const canInvokeExternal = Boolean(candidateProvider && candidateProvider.key !== "deterministic_fallback" && options.customInvoker);
+    const providerObj = canInvokeExternal ? candidateProvider! : providers[0]!;
+    let usedFallback = preferred !== "deterministic_fallback" && providerObj.key === "deterministic_fallback";
 
     const inputSnapshot = {
       articleCount: articles.length,
@@ -456,7 +491,13 @@ export class AiProviderRegistry {
       eventKey: relatedEvent?.dedupeKey ?? null
     };
     const rawCombinedText = articles.map((a) => `${a.title} ${a.summary}`).join(" ");
+    const allowedSourceUrls = [
+      ...articles.map((a) => a.url),
+      ...(relatedEvent?.verifiedEvidence.map((ev) => ev.sourceUrl) ?? [])
+    ];
     const inputTokens = Math.max(1, Math.ceil(rawCombinedText.length / 4));
+    const maxInputTokens = options.maxInputTokens ?? 4000;
+    const maxCostUsd = options.maxCostUsd ?? 0.25;
 
     let output: AiLayer2Output;
     let errorMessage: string | undefined;
@@ -464,12 +505,49 @@ export class AiProviderRegistry {
     let finalModelName = providerObj.key === "deterministic_fallback" ? "deterministic-reasoning-v1" : `${providerObj.key}-reasoning`;
 
     try {
-      if (options.customInvoker && providerObj.key !== "deterministic_fallback") {
+      if (canInvokeExternal && options.customInvoker) {
+        if (inputTokens > maxInputTokens) {
+          throw new Error(`Input token limit exceeded (${inputTokens} > ${maxInputTokens})`);
+        }
+        const projectedCost = (inputTokens * 0.0025 + 1500 * 0.01) / 1000;
+        if (projectedCost > maxCostUsd) {
+          throw new Error(`Configured AI cost limit exceeded ($${projectedCost.toFixed(4)} > $${maxCostUsd.toFixed(4)})`);
+        }
+
         const timeoutMs = options.timeoutMs ?? 12_000;
-        output = await Promise.race([
-          options.customInvoker(providerObj.key, inputSnapshot),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("AI provider timeout")), timeoutMs))
-        ]);
+        const maxRetries = Math.max(0, Math.min(options.maxRetries ?? 1, 2));
+        let lastErr: unknown;
+        let rawResp: AiLayer2Output | string | undefined;
+
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          try {
+            rawResp = await Promise.race([
+              options.customInvoker(providerObj.key, inputSnapshot),
+              new Promise<never>((_, reject) => setTimeout(() => reject(new Error("AI provider timeout")), timeoutMs))
+            ]);
+            lastErr = undefined;
+            break;
+          } catch (err) {
+            lastErr = err;
+          }
+        }
+        if (lastErr !== undefined) {
+          throw lastErr;
+        }
+
+        const parsed: AiLayer2Output =
+          typeof rawResp === "string" ? (JSON.parse(rawResp) as AiLayer2Output) : (rawResp as AiLayer2Output);
+
+        const extValidation = DeterministicValidationLayer.validateLayer2Output(parsed, {
+          ...(options.evaluationTimeMs !== undefined ? { evaluationTimeMs: options.evaluationTimeMs } : {}),
+          rawInputText: rawCombinedText,
+          allowedSourceUrls
+        });
+
+        if (extValidation.status === "rejected") {
+          throw new Error(`External AI output rejected by Layer 3 validator: ${extValidation.checksFailed.join(",")}`);
+        }
+        output = parsed;
       } else {
         output = AdvancedReasoningLayer.synthesize(articles, relatedEvent);
       }
@@ -477,12 +555,14 @@ export class AiProviderRegistry {
       errorMessage = error instanceof Error ? error.message.slice(0, 200) : "AI invocation failed";
       finalProviderKey = "deterministic_fallback";
       finalModelName = "deterministic-reasoning-v1";
+      usedFallback = true;
       output = AdvancedReasoningLayer.synthesize(articles, relatedEvent);
     }
 
     const validation = DeterministicValidationLayer.validateLayer2Output(output, {
       ...(options.evaluationTimeMs !== undefined ? { evaluationTimeMs: options.evaluationTimeMs } : {}),
-      rawInputText: rawCombinedText
+      rawInputText: rawCombinedText,
+      allowedSourceUrls
     });
 
     const outputJson = JSON.stringify(output);

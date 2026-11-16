@@ -268,6 +268,57 @@ export class EventLifecycleService {
   }
 }
 
+const TIMEZONE_OFFSET_MINUTES: Record<string, number> = {
+  UTC: 0,
+  GMT: 0,
+  EST: -300,
+  EDT: -240,
+  CST: -360,
+  CDT: -300,
+  CET: 60,
+  CEST: 120,
+  BST: 60,
+  JST: 540
+};
+
+export function parseEventTimestampToUtc(
+  val: string | number | Date | null | undefined,
+  timezone = "UTC"
+): Date | null {
+  if (val === null || val === undefined) return null;
+  if (val instanceof Date) {
+    if (!Number.isFinite(val.getTime())) throw new Error("Invalid event timestamp");
+    return new Date(val.getTime());
+  }
+  if (typeof val === "number") {
+    const d = new Date(val);
+    if (!Number.isFinite(d.getTime())) throw new Error("Invalid event timestamp");
+    return d;
+  }
+  const trimmed = val.trim();
+  const hasExplicitZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
+  if (!hasExplicitZone && timezone && timezone.toUpperCase() !== "UTC") {
+    const tzUpper = timezone.toUpperCase();
+    let offsetMin = TIMEZONE_OFFSET_MINUTES[tzUpper];
+    if (offsetMin === undefined) {
+      const m = tzUpper.match(/^UTC([+-]\d{1,2})(?::(\d{2}))?$/);
+      if (m) {
+        const hrs = Number(m[1]);
+        const mins = Number(m[2] ?? "0");
+        offsetMin = hrs * 60 + (hrs < 0 ? -mins : mins);
+      }
+    }
+    if (offsetMin !== undefined) {
+      const asUtc = new Date(`${trimmed.replace(" ", "T")}Z`);
+      if (!Number.isFinite(asUtc.getTime())) throw new Error("Invalid event timestamp");
+      return new Date(asUtc.getTime() - offsetMin * 60_000);
+    }
+  }
+  const d = new Date(trimmed);
+  if (!Number.isFinite(d.getTime())) throw new Error("Invalid event timestamp");
+  return d;
+}
+
 export class EventNormalizationService {
   static normalizeEvent(raw: RawGlobalEventInput, now = new Date()): NormalizedGlobalEvent {
     if (!raw.eventName || !raw.eventName.trim()) {
@@ -280,16 +331,10 @@ export class EventNormalizationService {
       throw new Error("Unscheduled events require verified source evidence");
     }
 
-    const parseOptDate = (val: string | number | Date | null | undefined): Date | null => {
-      if (val === null || val === undefined) return null;
-      const d = new Date(val);
-      if (!Number.isFinite(d.getTime())) throw new Error("Invalid event timestamp");
-      return d;
-    };
-
-    const scheduledAt = parseOptDate(raw.scheduledAt);
-    const publishedAt = parseOptDate(raw.publishedAt);
-    const collectedAt = parseOptDate(raw.collectedAt) ?? now;
+    const tz = raw.timezone ?? "UTC";
+    const scheduledAt = parseEventTimestampToUtc(raw.scheduledAt, tz);
+    const publishedAt = parseEventTimestampToUtc(raw.publishedAt, tz);
+    const collectedAt = parseEventTimestampToUtc(raw.collectedAt, tz) ?? publishedAt ?? now;
 
     if (isScheduled && !scheduledAt) {
       throw new Error("Scheduled events require a scheduledAt timestamp");
@@ -332,7 +377,7 @@ export class EventNormalizationService {
       scheduledAt,
       publishedAt,
       collectedAt,
-      timezone: raw.timezone ?? "UTC",
+      timezone: "UTC",
       previousValue,
       revisedPreviousValue,
       consensusValue,
@@ -344,7 +389,44 @@ export class EventNormalizationService {
       surprise,
       affectedAssets,
       verifiedEvidence: raw.verifiedEvidence ?? [],
-      metadata: raw.metadata ?? {}
+      metadata: { ...(raw.metadata ?? {}), originalTimezone: tz }
+    };
+  }
+
+  /**
+   * Produces a point-in-time view of an event at `evaluationTimeMs` so pre-event and
+   * historical backtest evaluations never leak future `actualValue`, `publishedAt`, or `revisedPreviousValue`.
+   */
+  static maskEventAsOf(event: NormalizedGlobalEvent, evaluationTimeMs: number): NormalizedGlobalEvent {
+    const releaseMs = (event.publishedAt ?? event.scheduledAt)?.getTime() ?? Number.POSITIVE_INFINITY;
+    const availableMs =
+      event.publishedAt && event.collectedAt.getTime() > event.publishedAt.getTime()
+        ? event.collectedAt.getTime()
+        : releaseMs;
+    const isReleasedAsOf = evaluationTimeMs >= availableMs;
+
+    const actualValue = isReleasedAsOf ? event.actualValue : null;
+    const publishedAt = isReleasedAsOf ? event.publishedAt : null;
+    const revisedPreviousValue = null; // Never leak post-hoc revisions into initial event evaluation
+    const surprise = EventExpectationService.evaluateSurprise(actualValue, event.consensusValue);
+    const status = EventLifecycleService.resolveStatus(
+      {
+        isScheduled: event.isScheduled,
+        scheduledAt: event.scheduledAt,
+        publishedAt,
+        actualValue,
+        revisedPreviousValue
+      },
+      new Date(evaluationTimeMs)
+    );
+
+    return {
+      ...event,
+      publishedAt,
+      actualValue,
+      revisedPreviousValue,
+      surprise,
+      status
     };
   }
 }

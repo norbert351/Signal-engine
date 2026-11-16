@@ -144,21 +144,25 @@ export type NormalizedNewsArticle = {
 };
 
 const PROMPT_INJECTION_PATTERNS = [
-  /ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions/gi,
-  /system\s*prompt\s*:/gi,
-  /you\s+are\s+now\s+a/gi,
-  /execute\s+(?:market\s+)?order/gi,
-  /disregard\s+risk\s+controls/gi,
-  /<script\b[^>]*>[\s\S]*?<\/script>/gi
+  /ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions/i,
+  /system\s*prompt\s*:/i,
+  /\[\s*system\s*\]/i,
+  /###\s*(?:system|instruction)\b/i,
+  /(?:developer|assistant)\s*:\s*override/i,
+  /you\s+are\s+now\s+a/i,
+  /execute\s+(?:market\s+)?order/i,
+  /(?:disregard|override|bypass)\s+risk\s+controls/i,
+  /<script\b[^>]*>[\s\S]*?<\/script>/i
 ];
 
 export function sanitizeUntrustedArticleText(input: string): { text: string; sanitized: boolean } {
   let out = input.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]+/g, " ");
   let sanitized = false;
   for (const pattern of PROMPT_INJECTION_PATTERNS) {
+    const globalPattern = new RegExp(pattern.source, "gi");
     if (pattern.test(out)) {
       sanitized = true;
-      out = out.replace(pattern, "[quarantined-untrusted-directive]");
+      out = out.replace(globalPattern, "[quarantined-untrusted-directive]");
     }
   }
   out = out.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -275,6 +279,28 @@ const STOP_WORDS = new Set([
   "before", "amid", "says", "said", "report", "reports", "update", "breaking", "news"
 ]);
 
+const OPPOSING_POLARITY_GROUPS: Array<[RegExp, RegExp]> = [
+  [/\b(?:approves|approved|approval|greenlights)\b/i, /\b(?:rejects|rejected|rejection|delays|delayed|denies|denied)\b/i],
+  [/\b(?:hike|hikes|hiked|raises|raised|increase|increases)\b/i, /\b(?:cut|cuts|lowers|lowered|pauses|paused|decrease|decreases)\b/i],
+  [/\b(?:beats|beat|above|hotter|surges|rises|rose|climbs)\b/i, /\b(?:misses|missed|below|cooler|drops|falls|fell|plunges)\b/i],
+  [/\b(?:lists|listing|launches)\b/i, /\b(?:delists|delisting|halts|suspends)\b/i]
+];
+
+function tokenizeHeadlinePreservingNumbers(value: string): string[] {
+  return value
+    .toLowerCase()
+    .replace(/(\d)\.(\d)/g, "$1dot$2")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/(\d)dot(\d)/g, "$1.$2")
+    .split(/\s+/)
+    .filter((tok) => (tok.length >= 3 || /\d/.test(tok)) && !STOP_WORDS.has(tok));
+}
+
+function extractExplicitNumbers(value: string): string[] {
+  const matches = value.toLowerCase().match(/\b\d+(?:\.\d+)?%?\b/g);
+  return matches ? [...new Set(matches)].sort() : [];
+}
+
 export class NewsDeduplicationService {
   static computeContentHash(sourceKey: string, title: string, summary: string, publishedAtIso: string): string {
     const normalized = `${sourceKey.toLowerCase()}|${title.toLowerCase().trim()}|${summary.toLowerCase().trim()}|${publishedAtIso.slice(0, 16)}`;
@@ -282,26 +308,28 @@ export class NewsDeduplicationService {
   }
 
   static computeTitleFingerprint(title: string): string {
-    const tokens = title
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, " ")
-      .split(/\s+/)
-      .filter((tok) => tok.length >= 3 && !STOP_WORDS.has(tok));
-    const uniqueSorted = [...new Set(tokens)].sort().slice(0, 12);
+    const tokens = tokenizeHeadlinePreservingNumbers(title);
+    const uniqueSorted = [...new Set(tokens)].sort().slice(0, 14);
     return deterministicHexHash(uniqueSorted.join(" "));
   }
 
+  static hasConflictingPolarityOrNumbers(titleA: string, titleB: string): boolean {
+    const numsA = extractExplicitNumbers(titleA);
+    const numsB = extractExplicitNumbers(titleB);
+    if (numsA.length > 0 && numsB.length > 0 && numsA.join(",") !== numsB.join(",")) {
+      return true;
+    }
+    for (const [pos, neg] of OPPOSING_POLARITY_GROUPS) {
+      if ((pos.test(titleA) && neg.test(titleB)) || (neg.test(titleA) && pos.test(titleB))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   static tokenSimilarity(titleA: string, titleB: string): number {
-    const tokenize = (value: string) =>
-      new Set(
-        value
-          .toLowerCase()
-          .replace(/[^a-z0-9\s]/g, " ")
-          .split(/\s+/)
-          .filter((tok) => tok.length >= 3 && !STOP_WORDS.has(tok))
-      );
-    const setA = tokenize(titleA);
-    const setB = tokenize(titleB);
+    const setA = new Set(tokenizeHeadlinePreservingNumbers(titleA));
+    const setB = new Set(tokenizeHeadlinePreservingNumbers(titleB));
     if (setA.size === 0 || setB.size === 0) return 0;
     let intersection = 0;
     for (const tok of setA) {
@@ -319,7 +347,8 @@ export class NewsDeduplicationService {
       if (existing.contentHash === candidate.contentHash) {
         return { isDuplicate: true, duplicateOfId: existing.id, isStoryUpdate: false, similarity: 1 };
       }
-      if (existing.titleFingerprint === candidate.titleFingerprint) {
+      const conflict = this.hasConflictingPolarityOrNumbers(candidate.title, existing.title);
+      if (existing.titleFingerprint === candidate.titleFingerprint && !conflict) {
         const ageDiffMs = Math.abs(candidate.publishedAt.getTime() - existing.publishedAt.getTime());
         if (ageDiffMs <= 6 * 3600_000) {
           return { isDuplicate: true, duplicateOfId: existing.id, isStoryUpdate: false, similarity: 0.95 };
@@ -327,10 +356,14 @@ export class NewsDeduplicationService {
         return { isDuplicate: false, duplicateOfId: existing.id, isStoryUpdate: true, similarity: 0.9 };
       }
       const sim = this.tokenSimilarity(candidate.title, existing.title);
-      if (sim >= 0.8) {
-        return { isDuplicate: true, duplicateOfId: existing.id, isStoryUpdate: false, similarity: sim };
+      if (sim >= 0.72 && !conflict) {
+        const ageDiffMs = Math.abs(candidate.publishedAt.getTime() - existing.publishedAt.getTime());
+        if (ageDiffMs <= 12 * 3600_000) {
+          return { isDuplicate: true, duplicateOfId: existing.id, isStoryUpdate: false, similarity: sim };
+        }
+        return { isDuplicate: false, duplicateOfId: existing.id, isStoryUpdate: true, similarity: sim };
       }
-      if (sim >= 0.6) {
+      if (sim >= 0.55) {
         return { isDuplicate: false, duplicateOfId: existing.id, isStoryUpdate: true, similarity: sim };
       }
     }
@@ -551,6 +584,12 @@ export class NewsFactExtractionService {
   }
 }
 
+function invertBias(bias: DirectionBias): DirectionBias {
+  if (bias === "bullish") return "bearish";
+  if (bias === "bearish") return "bullish";
+  return bias;
+}
+
 export class NewsImpactAnalysisService {
   static mapAffectedInstruments(
     entities: ExtractedEntity[],
@@ -583,27 +622,40 @@ export class NewsImpactAnalysisService {
     for (const entity of entities) {
       if (entity.entityType === "crypto_token") {
         const symbol = `${entity.code}USDT`;
-        addMapping(symbol, "crypto_perpetual", "direct", entity.role === "primary" ? 95 : 80);
+        addMapping(symbol, "crypto_perpetual", "direct", entity.role === "primary" ? 95 : 80, directionBias);
       } else if (entity.entityType === "commodity" && entity.code === "XAU") {
-        addMapping("XAU_USD", "forex", "direct", 92);
+        addMapping("XAU_USD", "forex", "direct", 92, directionBias);
       } else if (entity.entityType === "currency" || entity.entityType === "central_bank") {
         if (entity.code === "USD" || entity.code === "FED") {
-          addMapping("EUR_USD", "forex", "macro_driver", 88);
-          addMapping("GBP_USD", "forex", "macro_driver", 85);
-          addMapping("USD_JPY", "forex", "macro_driver", 88);
-          addMapping("XAU_USD", "forex", "macro_driver", 86);
-          addMapping("BTCUSDT", "crypto_perpetual", "macro_driver", 78);
+          // In NewsClassificationService, rate cuts/dovish = bullish (risk-on / weaker USD),
+          // rate hikes/hawkish/hotter CPI = bearish (risk-off / stronger USD).
+          // Therefore USD_JPY (where USD is base currency) moves opposite to EUR_USD/GBP_USD/XAU_USD/BTCUSDT.
+          addMapping("EUR_USD", "forex", "macro_driver", 88, directionBias);
+          addMapping("GBP_USD", "forex", "macro_driver", 85, directionBias);
+          addMapping("USD_JPY", "forex", "macro_driver", 88, invertBias(directionBias));
+          addMapping("XAU_USD", "forex", "macro_driver", 86, directionBias);
+          addMapping("BTCUSDT", "crypto_perpetual", "macro_driver", 78, directionBias);
         }
         if (entity.code === "EUR" || entity.code === "ECB") {
-          addMapping("EUR_USD", "forex", "macro_driver", 90);
-          addMapping("EUR_JPY", "forex", "macro_driver", 86);
+          // For ECB, hawkish/rate hike is classified as "bearish" by general risk classifier, so invert for EUR base pairs
+          const eurPairBias =
+            category === "central_bank_decisions" || category === "inflation_announcements"
+              ? invertBias(directionBias)
+              : directionBias;
+          addMapping("EUR_USD", "forex", "macro_driver", 90, eurPairBias);
+          addMapping("EUR_JPY", "forex", "macro_driver", 86, eurPairBias);
         }
         if (entity.code === "GBP" || entity.code === "BOE") {
-          addMapping("GBP_USD", "forex", "macro_driver", 90);
+          const gbpPairBias =
+            category === "central_bank_decisions" || category === "inflation_announcements"
+              ? invertBias(directionBias)
+              : directionBias;
+          addMapping("GBP_USD", "forex", "macro_driver", 90, gbpPairBias);
         }
         if (entity.code === "JPY" || entity.code === "BOJ") {
-          addMapping("USD_JPY", "forex", "macro_driver", 90);
-          addMapping("EUR_JPY", "forex", "macro_driver", 86);
+          // For BOJ rate hike ("bearish" in risk classifier -> stronger JPY -> bearish USD_JPY & EUR_JPY)
+          addMapping("USD_JPY", "forex", "macro_driver", 90, directionBias);
+          addMapping("EUR_JPY", "forex", "macro_driver", 86, directionBias);
         }
       }
     }
@@ -617,17 +669,74 @@ export class NewsImpactAnalysisService {
   }
 }
 
+export class RssFeedParser {
+  /**
+   * Deterministic XML/RSS/Atom parser for public official feeds (Fed, ECB, SEC).
+   * Treats all feed fields as untrusted external input.
+   */
+  static parseFeedXml(xmlText: string, sourceKey: string, collectedAt = new Date()): RawNewsArticleInput[] {
+    const items: RawNewsArticleInput[] = [];
+    const itemBlocks = [
+      ...xmlText.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi),
+      ...xmlText.matchAll(/<entry\b[^>]*>([\s\S]*?)<\/entry>/gi)
+    ];
+
+    const extractTag = (block: string, tag: string): string | undefined => {
+      const m = block.match(new RegExp(`<${tag}\\b[^>]*>(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([\\s\\S]*?))<\\/${tag}>`, "i"));
+      const raw = (m?.[1] ?? m?.[2] ?? "").trim();
+      return raw || undefined;
+    };
+
+    for (const match of itemBlocks) {
+      const block = match[1] ?? "";
+      const title = extractTag(block, "title");
+      let url = extractTag(block, "link");
+      if (!url) {
+        const hrefMatch = block.match(/<link\b[^>]*href=["']([^"']+)["']/i);
+        url = hrefMatch?.[1]?.trim();
+      }
+      const pubRaw =
+        extractTag(block, "pubDate") ??
+        extractTag(block, "published") ??
+        extractTag(block, "updated") ??
+        extractTag(block, "dc:date");
+      const summary = extractTag(block, "description") ?? extractTag(block, "summary") ?? "";
+      const guid = extractTag(block, "guid") ?? extractTag(block, "id");
+
+      if (title && url && /^https?:\/\//i.test(url)) {
+        const parsedPub = pubRaw ? new Date(pubRaw) : collectedAt;
+        const publishedAt = Number.isFinite(parsedPub.getTime()) ? parsedPub : collectedAt;
+        items.push({
+          sourceKey,
+          ...(guid ? { externalId: guid.slice(0, 180) } : {}),
+          url,
+          title,
+          summary,
+          publishedAt,
+          collectedAt
+        });
+      }
+    }
+    return items;
+  }
+}
+
 export class NewsIntelligenceService {
   constructor(private readonly registry = new NewsSourceRegistryService()) {}
 
   normalizeArticle(raw: RawNewsArticleInput): NormalizedNewsArticle {
     if (!raw.title || !raw.title.trim()) throw new Error("Article title is required");
     if (!raw.url || !/^https?:\/\//i.test(raw.url.trim())) throw new Error("Valid article URL is required");
-    const publishedAt = new Date(raw.publishedAt);
+    const rawPublishedAt = new Date(raw.publishedAt);
     const collectedAt = raw.collectedAt ? new Date(raw.collectedAt) : new Date();
-    if (!Number.isFinite(publishedAt.getTime()) || !Number.isFinite(collectedAt.getTime())) {
+    if (!Number.isFinite(rawPublishedAt.getTime()) || !Number.isFinite(collectedAt.getTime())) {
       throw new Error("Invalid article timestamp");
     }
+    // Guard against future-spoofed publication timestamps exceeding collection time
+    const publishedAt =
+      rawPublishedAt.getTime() > collectedAt.getTime() + 5 * 60_000
+        ? new Date(collectedAt.getTime())
+        : rawPublishedAt;
 
     const cleanTitle = sanitizeUntrustedArticleText(raw.title);
     const cleanSummary = sanitizeUntrustedArticleText(raw.summary ?? "");
