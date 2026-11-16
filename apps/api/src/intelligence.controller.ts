@@ -5,6 +5,8 @@ import {
   EVIDENCE_FORMULA_SPEC,
   EventNormalizationService,
   NewsIntelligenceService,
+  type DirectionBias,
+  type ImportanceLevel,
   type TechnicalSignalSnapshot
 } from "@signal-engine/core";
 import {
@@ -93,31 +95,56 @@ export class IntelligenceController {
       listEconomicEvents({ limit: 30 })
     ]);
 
-    const normalizedArticles = articlesRaw.map((a) =>
-      newsService.normalizeArticle({
-        sourceKey: "federal_reserve_rss",
+    const normalizedArticles = articlesRaw.map((a) => {
+      const base = newsService.normalizeArticle({
+        sourceKey: "stored_article",
         url: a.url,
         title: a.title,
         summary: a.summary ?? "",
         publishedAt: a.publishedAt,
         collectedAt: a.collectedAt
-      })
-    );
+      });
+      return {
+        ...base,
+        contentHash: a.contentHash,
+        titleFingerprint: a.titleFingerprint,
+        category: a.category,
+        importance: a.importance as ImportanceLevel,
+        directionBias: a.directionBias as DirectionBias,
+        credibilityScore: Number(a.credibilityScore),
+        relevanceScore: Number(a.relevanceScore)
+      };
+    });
     const normalizedEvents = eventsRaw
-      .filter((e) => e.scheduledAt !== null)
-      .map((e) =>
-        EventNormalizationService.normalizeEvent({
+      .filter((e) => e.scheduledAt !== null || !e.isScheduled)
+      .map((e) => {
+        const existingEv = Array.isArray(e.verifiedEvidence)
+          ? (e.verifiedEvidence as Array<{ sourceUrl: string; headline: string; verifiedAt: string }>)
+          : [];
+        return EventNormalizationService.normalizeEvent({
           sourceKey: "official_central_bank_calendar",
           eventName: e.eventName,
           country: e.country,
           currency: e.currency,
           scheduledAt: e.scheduledAt,
           publishedAt: e.publishedAt,
+          collectedAt: e.collectedAt,
           previousValue: e.previousValue !== null ? Number(e.previousValue) : null,
           consensusValue: e.consensusValue !== null ? Number(e.consensusValue) : null,
-          actualValue: e.actualValue !== null ? Number(e.actualValue) : null
-        })
-      );
+          actualValue: e.actualValue !== null ? Number(e.actualValue) : null,
+          isScheduled: e.isScheduled,
+          verifiedEvidence:
+            existingEv.length > 0
+              ? existingEv
+              : [
+                  {
+                    sourceUrl: "https://www.federalreserve.gov",
+                    headline: e.eventName,
+                    verifiedAt: e.createdAt.toISOString()
+                  }
+                ]
+        });
+      });
 
     const fused = CentralIntelligenceService.correlateTechnicalSignal(
       {
@@ -169,31 +196,56 @@ export class IntelligenceController {
       listEconomicEvents({ limit: 25 })
     ]);
 
-    const normalizedArticles = articlesRaw.map((a) =>
-      newsService.normalizeArticle({
-        sourceKey: "federal_reserve_rss",
+    const normalizedArticles = articlesRaw.map((a) => {
+      const base = newsService.normalizeArticle({
+        sourceKey: "stored_article",
         url: a.url,
         title: a.title,
         summary: a.summary ?? "",
         publishedAt: a.publishedAt,
         collectedAt: a.collectedAt
-      })
-    );
+      });
+      return {
+        ...base,
+        contentHash: a.contentHash,
+        titleFingerprint: a.titleFingerprint,
+        category: a.category,
+        importance: a.importance as ImportanceLevel,
+        directionBias: a.directionBias as DirectionBias,
+        credibilityScore: Number(a.credibilityScore),
+        relevanceScore: Number(a.relevanceScore)
+      };
+    });
     const normalizedEvents = eventsRaw
-      .filter((e) => e.scheduledAt !== null)
-      .map((e) =>
-        EventNormalizationService.normalizeEvent({
+      .filter((e) => e.scheduledAt !== null || !e.isScheduled)
+      .map((e) => {
+        const existingEv = Array.isArray(e.verifiedEvidence)
+          ? (e.verifiedEvidence as Array<{ sourceUrl: string; headline: string; verifiedAt: string }>)
+          : [];
+        return EventNormalizationService.normalizeEvent({
           sourceKey: "official_central_bank_calendar",
           eventName: e.eventName,
           country: e.country,
           currency: e.currency,
           scheduledAt: e.scheduledAt,
           publishedAt: e.publishedAt,
+          collectedAt: e.collectedAt,
           previousValue: e.previousValue !== null ? Number(e.previousValue) : null,
           consensusValue: e.consensusValue !== null ? Number(e.consensusValue) : null,
-          actualValue: e.actualValue !== null ? Number(e.actualValue) : null
-        })
-      );
+          actualValue: e.actualValue !== null ? Number(e.actualValue) : null,
+          isScheduled: e.isScheduled,
+          verifiedEvidence:
+            existingEv.length > 0
+              ? existingEv
+              : [
+                  {
+                    sourceUrl: "https://www.federalreserve.gov",
+                    headline: e.eventName,
+                    verifiedAt: e.createdAt.toISOString()
+                  }
+                ]
+        });
+      });
 
     const draft = CentralIntelligenceService.generateIntelligenceReport({
       reportType,

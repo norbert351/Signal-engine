@@ -413,6 +413,63 @@ suite("database integration", () => {
     expect(evSignal.validationStatus).toBe("approved");
     expect(evSignal.outcomeStatus).toBe("pending_validation");
 
+    // Verify Flow #9: Event signal to historical outcome resolution
+    const resolvedOutcome = await intelligence.updateEventSignalOutcome({
+      eventSignalId: evSignal.id,
+      status: "target_hit",
+      observedEntryAssumption: 91520,
+      exitPrice: 92900,
+      exitTime: new Date("2026-11-16T14:30:00Z"),
+      netReturn: 0.013578,
+      maxFavorableExcursion: 0.016,
+      maxAdverseExcursion: 0.002,
+      holdingSeconds: 2700,
+      closedReason: "target_hit"
+    });
+    expect(resolvedOutcome.status).toBe("target_hit");
+    expect(Number(resolvedOutcome.netReturn)).toBeCloseTo(0.013578, 5);
+
+    // Verify event revision audit trail in event_updates
+    const revisedEconEvent = await intelligence.persistNormalizedGlobalEvent({
+      dedupeKey: "US:USD:us-cpi-yoy:2026-11-16T13:30",
+      sourceKey: "official_central_bank_calendar",
+      eventType: "scheduled_economic",
+      category: "inflation_announcements",
+      eventName: "US CPI YoY",
+      country: "US",
+      currency: "USD",
+      scheduledAt: new Date("2026-11-16T13:30:00Z"),
+      publishedAt: new Date("2026-11-16T13:30:02Z"),
+      collectedAt: new Date("2026-11-16T14:00:00Z"),
+      timezone: "UTC",
+      previousValue: 3.1,
+      revisedPreviousValue: 3.2,
+      consensusValue: 3.0,
+      actualValue: 2.8,
+      unit: "pct",
+      importance: "high",
+      status: "revised",
+      isScheduled: true,
+      surprise: { hasActualAndConsensus: true, surpriseValue: -0.2, surprisePct: -6.6667 },
+      verifiedEvidence: [{ sourceUrl: "https://www.bls.gov/cpi/", headline: "US CPI revised", verifiedAt: "2026-11-16T14:00:00Z" }]
+    });
+    expect(revisedEconEvent.status).toBe("revised");
+    const updateRows = await db.select().from(schema.eventUpdates).where(eq(schema.eventUpdates.eventId, econEvent.id));
+    expect(updateRows.some((u) => u.fieldChanged === "revised_previous_value")).toBe(true);
+
+    // Verify Flow #5: Market event correlation persistence
+    const corrRow = await intelligence.recordMarketEventCorrelation({
+      eventId: econEvent.id,
+      symbol: "BTCUSDT",
+      timeframe: "15m",
+      reaction15mPct: 1.12,
+      reaction1hPct: 1.85,
+      reaction4hPct: 2.1,
+      volumeRatio: 1.65,
+      volatilityRatio: 1.48
+    });
+    expect(corrRow.symbol).toBe("BTCUSDT");
+
     const evBt = await intelligence.persistEventBacktestRun({
       strategyKey: "post-event-momentum",
       symbol: "BTCUSDT",
@@ -451,5 +508,22 @@ suite("database integration", () => {
       riskWarnings: ["Post-CPI volatility active"]
     });
     expect(report.marketRegime).toBe("event_driven_volatility");
+
+    // Re-persist same reportKey to verify idempotent replacement of intelligence_evidence
+    await intelligence.persistIntelligenceReportRecord({
+      reportKey: "daily_summary:2026-11-16T14",
+      reportType: "daily_summary",
+      title: "Daily Market & Event Intelligence Summary (Updated)",
+      summary: "Updated summary.",
+      marketRegime: "event_driven_volatility",
+      sections: [{ heading: "Events", items: [] }],
+      evidenceRefs: [{ type: "economic_event", ref: econEvent.dedupeKey }],
+      riskWarnings: ["Post-CPI volatility active"]
+    });
+    const evRows = await db
+      .select()
+      .from(schema.intelligenceEvidence)
+      .where(eq(schema.intelligenceEvidence.reportId, report.id));
+    expect(evRows).toHaveLength(1);
   });
 });

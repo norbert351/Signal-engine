@@ -9,7 +9,12 @@ export function redactSensitiveText(value: string): string {
     process.env.TELEGRAM_BOT_TOKEN,
     process.env.TWELVE_DATA_API_KEY,
     process.env.ADMIN_API_KEY,
-    process.env.POSTGRES_PASSWORD
+    process.env.POSTGRES_PASSWORD,
+    process.env.OPENAI_API_KEY,
+    process.env.GEMINI_API_KEY,
+    process.env.ANTHROPIC_API_KEY,
+    process.env.CRYPTOPANIC_API_KEY,
+    process.env.NEWS_API_KEY
   ];
   for (const secret of envSecrets) {
     if (secret && secret.trim().length >= 4 && secret !== "replace-with-a-strong-password") {

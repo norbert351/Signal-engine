@@ -17,17 +17,27 @@ export class NewsController {
   async listArticles(
     @Query("category") category?: string,
     @Query("importance") importance?: string,
-    @Query("limit") limit = "50"
+    @Query("limit") limit = "50",
+    @Query("offset") offset = "0"
   ) {
     const parsedLimit = Number(limit);
+    const parsedOffset = Number(offset);
     if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 200) {
       throw new BadRequestException("limit must be an integer from 1 to 200");
+    }
+    if (!Number.isInteger(parsedOffset) || parsedOffset < 0 || parsedOffset > 10000) {
+      throw new BadRequestException("offset must be an integer from 0 to 10000");
     }
     if (importance !== undefined && !["low", "medium", "high", "critical"].includes(importance)) {
       throw new BadRequestException("Unsupported importance filter");
     }
-    const data = await listNewsArticles({ category, importance, limit: parsedLimit });
-    return { data, total: data.length, filters: { category: category ?? null, importance: importance ?? null } };
+    const data = await listNewsArticles({ category, importance, limit: parsedLimit, offset: parsedOffset });
+    return {
+      data,
+      total: data.length,
+      pagination: { limit: parsedLimit, offset: parsedOffset },
+      filters: { category: category ?? null, importance: importance ?? null }
+    };
   }
 
   @Get("sources")
@@ -41,17 +51,22 @@ export class NewsController {
     @Query("category") category?: string,
     @Query("importance") importance?: string,
     @Query("symbol") symbol?: string,
-    @Query("limit") limit = "50"
+    @Query("limit") limit = "50",
+    @Query("offset") offset = "0"
   ) {
     const parsedLimit = Number(limit);
+    const parsedOffset = Number(offset);
     if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 200) {
       throw new BadRequestException("limit must be an integer from 1 to 200");
+    }
+    if (!Number.isInteger(parsedOffset) || parsedOffset < 0 || parsedOffset > 10000) {
+      throw new BadRequestException("offset must be an integer from 0 to 10000");
     }
     if (symbol !== undefined && !/^[A-Z0-9_]{5,20}$/.test(symbol)) {
       throw new BadRequestException("Invalid symbol");
     }
-    const data = await listNewsEvents({ category, importance, symbol, limit: parsedLimit });
-    return { data, total: data.length };
+    const data = await listNewsEvents({ category, importance, symbol, limit: parsedLimit, offset: parsedOffset });
+    return { data, total: data.length, pagination: { limit: parsedLimit, offset: parsedOffset } };
   }
 
   @Post()

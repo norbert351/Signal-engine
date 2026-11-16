@@ -222,5 +222,16 @@ describe("Stage 8 — OpenAPI & 7-Section Market/Event Intelligence Dashboard", 
     expect(html).toContain("5. Technical Signals");
     expect(html).toContain("6. Intelligence Reports");
     expect(html).toContain("7. Performance & API");
+    expect(html).toContain("fetch('/api/v1/news?limit=25')");
+    expect(html).toContain("fetch('/api/v1/events/calendar?limit=25')");
+    expect(html).toContain("fetch('/api/v1/event-signals?limit=25')");
+    expect(html).toContain("fetch('/api/v1/intelligence/reports?limit=15')");
+
+    process.env.OPENAI_API_KEY = "sk-live-secret-openai-token";
+    try {
+      expect(redactSensitiveText("Error with sk-live-secret-openai-token")).toBe("Error with [redacted]");
+    } finally {
+      delete process.env.OPENAI_API_KEY;
+    }
   });
 });

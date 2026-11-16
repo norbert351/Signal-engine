@@ -32,11 +32,16 @@ export class EventTradingController {
     @Query("strategyKey") strategyKey?: string,
     @Query("validationStatus") validationStatus?: string,
     @Query("outcomeStatus") outcomeStatus?: string,
-    @Query("limit") limit = "50"
+    @Query("limit") limit = "50",
+    @Query("offset") offset = "0"
   ) {
     const parsedLimit = Number(limit);
+    const parsedOffset = Number(offset);
     if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 200) {
       throw new BadRequestException("limit must be an integer from 1 to 200");
+    }
+    if (!Number.isInteger(parsedOffset) || parsedOffset < 0 || parsedOffset > 10000) {
+      throw new BadRequestException("offset must be an integer from 0 to 10000");
     }
     if (symbol !== undefined && !/^[A-Z0-9_]{5,20}$/.test(symbol)) {
       throw new BadRequestException("Invalid symbol");
@@ -46,9 +51,10 @@ export class EventTradingController {
       strategyKey,
       validationStatus,
       outcomeStatus,
-      limit: parsedLimit
+      limit: parsedLimit,
+      offset: parsedOffset
     });
-    return { data, total: data.length };
+    return { data, total: data.length, pagination: { limit: parsedLimit, offset: parsedOffset } };
   }
 
   @Get("event-strategies")
@@ -99,17 +105,29 @@ export class EventTradingController {
       throw new BadRequestException("entryCandles and confirmationCandles arrays are required");
     }
 
-    const normalizedEvent = EventNormalizationService.normalizeEvent({
-      sourceKey: body.event.sourceKey ?? "official_central_bank_calendar",
-      eventName: body.event.eventName,
-      ...(body.event.country ? { country: body.event.country } : {}),
-      ...(body.event.currency ? { currency: body.event.currency } : {}),
-      ...(body.event.scheduledAt !== undefined ? { scheduledAt: body.event.scheduledAt } : {}),
-      ...(body.event.publishedAt !== undefined ? { publishedAt: body.event.publishedAt } : {}),
-      ...(body.event.previousValue !== undefined ? { previousValue: body.event.previousValue } : {}),
-      ...(body.event.consensusValue !== undefined ? { consensusValue: body.event.consensusValue } : {}),
-      ...(body.event.actualValue !== undefined ? { actualValue: body.event.actualValue } : {})
-    });
+    let normalizedEvent;
+    try {
+      normalizedEvent = EventNormalizationService.normalizeEvent({
+        sourceKey: body.event.sourceKey ?? "official_central_bank_calendar",
+        eventName: body.event.eventName,
+        ...(body.event.country ? { country: body.event.country } : {}),
+        ...(body.event.currency ? { currency: body.event.currency } : {}),
+        ...(body.event.scheduledAt !== undefined ? { scheduledAt: body.event.scheduledAt } : {}),
+        ...(body.event.publishedAt !== undefined ? { publishedAt: body.event.publishedAt } : {}),
+        ...(body.event.previousValue !== undefined ? { previousValue: body.event.previousValue } : {}),
+        ...(body.event.consensusValue !== undefined ? { consensusValue: body.event.consensusValue } : {}),
+        ...(body.event.actualValue !== undefined ? { actualValue: body.event.actualValue } : {}),
+        ...(body.event.isScheduled !== undefined ? { isScheduled: body.event.isScheduled } : {}),
+        ...(Array.isArray(body.event.verifiedEvidence) ? { verifiedEvidence: body.event.verifiedEvidence } : {})
+      });
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Invalid event payload");
+    }
+
+    const strategies = await listEventStrategies();
+    const strategyRow = strategies.find((s) => s.key === body.strategyKey);
+    const strategyEnabled = Boolean(strategyRow?.enabled);
+    const strategyApproved = Boolean(strategyRow?.approved);
 
     const market = body.market === "forex" || body.symbol.includes("_") ? ("forex" as const) : ("crypto_perpetual" as const);
     const timeframe = typeof body.timeframe === "string" ? body.timeframe : "15m";
@@ -156,7 +174,7 @@ export class EventTradingController {
       actualEventAt: normalizedEvent.publishedAt,
       sourceReferences: normalizedEvent.verifiedEvidence.map((v) => v.sourceUrl),
       quantitativeEvidence: evaluated.quantitativeEvidence,
-      scoreBreakdown: { rationale: evaluated.rationale, strategyEnabled: false, strategyApproved: false },
+      scoreBreakdown: { rationale: evaluated.rationale, strategyEnabled, strategyApproved },
       validationStatus: evaluated.validationStatus,
       ...(evaluated.rejectionReason ? { rejectionReason: evaluated.rejectionReason } : {}),
       outcomeStatus: evaluated.outcomeStatus,
@@ -204,19 +222,26 @@ export class EventTradingController {
       throw new BadRequestException("Explicit costs (feeBpsPerSide, spreadBps, slippageBps) are required");
     }
 
-    const normalizedEvents = body.events.map((e) =>
-      EventNormalizationService.normalizeEvent({
-        sourceKey: e.sourceKey ?? "official_central_bank_calendar",
-        eventName: e.eventName ?? "Scheduled Event",
-        ...(e.country ? { country: e.country } : {}),
-        ...(e.currency ? { currency: e.currency } : {}),
-        ...(e.scheduledAt !== undefined ? { scheduledAt: e.scheduledAt } : {}),
-        ...(e.publishedAt !== undefined ? { publishedAt: e.publishedAt } : {}),
-        ...(e.previousValue !== undefined ? { previousValue: e.previousValue } : {}),
-        ...(e.consensusValue !== undefined ? { consensusValue: e.consensusValue } : {}),
-        ...(e.actualValue !== undefined ? { actualValue: e.actualValue } : {})
-      })
-    );
+    let normalizedEvents;
+    try {
+      normalizedEvents = body.events.map((e) =>
+        EventNormalizationService.normalizeEvent({
+          sourceKey: e.sourceKey ?? "official_central_bank_calendar",
+          eventName: e.eventName ?? "Scheduled Event",
+          ...(e.country ? { country: e.country } : {}),
+          ...(e.currency ? { currency: e.currency } : {}),
+          ...(e.scheduledAt !== undefined ? { scheduledAt: e.scheduledAt } : {}),
+          ...(e.publishedAt !== undefined ? { publishedAt: e.publishedAt } : {}),
+          ...(e.previousValue !== undefined ? { previousValue: e.previousValue } : {}),
+          ...(e.consensusValue !== undefined ? { consensusValue: e.consensusValue } : {}),
+          ...(e.actualValue !== undefined ? { actualValue: e.actualValue } : {}),
+          ...(e.isScheduled !== undefined ? { isScheduled: e.isScheduled } : {}),
+          ...(Array.isArray(e.verifiedEvidence) ? { verifiedEvidence: e.verifiedEvidence } : {})
+        })
+      );
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Invalid event payload in backtest");
+    }
 
     const market = body.market === "forex" || body.symbol.includes("_") ? ("forex" as const) : ("crypto_perpetual" as const);
     const timeframe = typeof body.timeframe === "string" ? body.timeframe : "15m";

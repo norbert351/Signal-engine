@@ -18,6 +18,7 @@ import {
   eventSignals,
   eventSources,
   eventStrategyConfigs,
+  eventUpdates,
   intelligenceEvidence,
   intelligenceReports,
   marketEventCorrelations,
@@ -253,17 +254,20 @@ export async function listNewsArticles(filters: {
   category?: string | undefined;
   importance?: string | undefined;
   limit?: number | undefined;
+  offset?: number | undefined;
 } = {}) {
   const conditions = [];
   if (filters.category) conditions.push(eq(newsArticles.category, filters.category));
   if (filters.importance) conditions.push(eq(newsArticles.importance, filters.importance));
   const bounded = Math.min(Math.max(filters.limit ?? 50, 1), 200);
+  const offset = Math.max(filters.offset ?? 0, 0);
   return db
     .select()
     .from(newsArticles)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(newsArticles.publishedAt))
-    .limit(bounded);
+    .limit(bounded)
+    .offset(offset);
 }
 
 export async function listNewsEvents(filters: {
@@ -271,17 +275,20 @@ export async function listNewsEvents(filters: {
   importance?: string | undefined;
   symbol?: string | undefined;
   limit?: number | undefined;
+  offset?: number | undefined;
 } = {}) {
   const bounded = Math.min(Math.max(filters.limit ?? 50, 1), 200);
+  const offset = Math.max(filters.offset ?? 0, 0);
   const conditions = [];
   if (filters.category) conditions.push(eq(newsEvents.category, filters.category));
   if (filters.importance) conditions.push(eq(newsEvents.importance, filters.importance));
+  const fetchLimit = filters.symbol ? 200 : bounded + offset;
   const events = await db
     .select()
     .from(newsEvents)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(newsEvents.firstReportedAt))
-    .limit(bounded);
+    .limit(fetchLimit);
 
   const out = [];
   for (const ev of events) {
@@ -289,7 +296,7 @@ export async function listNewsEvents(filters: {
     if (filters.symbol && !assets.some((a) => a.symbol === filters.symbol)) continue;
     out.push({ ...ev, affectedAssets: assets });
   }
-  return out;
+  return out.slice(offset, offset + bounded);
 }
 
 // ============================================================================
@@ -397,9 +404,30 @@ export async function persistNormalizedGlobalEvent(input: {
           reason: "status_transition"
         });
       }
+      const trackedFields: Array<[string, string | null, string | null]> = [
+        ["consensus_value", existing.consensusValue, values.consensusValue],
+        ["actual_value", existing.actualValue, values.actualValue],
+        ["revised_previous_value", existing.revisedPreviousValue, values.revisedPreviousValue],
+        [
+          "scheduled_at",
+          existing.scheduledAt ? existing.scheduledAt.toISOString() : null,
+          values.scheduledAt ? values.scheduledAt.toISOString() : null
+        ]
+      ];
+      for (const [fieldChanged, oldValue, newValue] of trackedFields) {
+        if (oldValue !== newValue) {
+          await tx.insert(eventUpdates).values({
+            eventId: eventRow.id,
+            fieldChanged,
+            oldValue,
+            newValue,
+            source: input.sourceKey
+          });
+        }
+      }
     }
 
-    if (input.consensusValue !== null) {
+    if (input.consensusValue !== null && (!existing || existing.consensusValue !== values.consensusValue)) {
       await tx.insert(eventExpectations).values({
         eventId: eventRow.id,
         consensusValue: String(input.consensusValue),
@@ -408,7 +436,12 @@ export async function persistNormalizedGlobalEvent(input: {
       });
     }
 
-    if (input.actualValue !== null) {
+    if (
+      input.actualValue !== null &&
+      (!existing ||
+        existing.actualValue !== values.actualValue ||
+        existing.revisedPreviousValue !== values.revisedPreviousValue)
+    ) {
       await tx.insert(eventActualResults).values({
         eventId: eventRow.id,
         actualValue: String(input.actualValue),
@@ -433,6 +466,7 @@ export async function listEconomicEvents(filters: {
   from?: Date | undefined;
   to?: Date | undefined;
   limit?: number | undefined;
+  offset?: number | undefined;
 } = {}) {
   const conditions = [];
   if (filters.category) conditions.push(eq(economicEvents.category, filters.category));
@@ -442,12 +476,14 @@ export async function listEconomicEvents(filters: {
   if (filters.from) conditions.push(gte(economicEvents.scheduledAt, filters.from));
   if (filters.to) conditions.push(lte(economicEvents.scheduledAt, filters.to));
   const bounded = Math.min(Math.max(filters.limit ?? 50, 1), 200);
+  const offset = Math.max(filters.offset ?? 0, 0);
   return db
     .select()
     .from(economicEvents)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(economicEvents.scheduledAt), desc(economicEvents.createdAt))
-    .limit(bounded);
+    .limit(bounded)
+    .offset(offset);
 }
 
 export async function listEventAssetMappings(symbol?: string, eventCategory?: string) {
@@ -602,6 +638,7 @@ export async function listEventSignals(filters: {
   validationStatus?: string | undefined;
   outcomeStatus?: string | undefined;
   limit?: number | undefined;
+  offset?: number | undefined;
 } = {}) {
   const conditions = [];
   if (filters.symbol) conditions.push(eq(eventSignals.symbol, filters.symbol));
@@ -609,12 +646,62 @@ export async function listEventSignals(filters: {
   if (filters.validationStatus) conditions.push(eq(eventSignals.validationStatus, filters.validationStatus));
   if (filters.outcomeStatus) conditions.push(eq(eventSignals.outcomeStatus, filters.outcomeStatus));
   const bounded = Math.min(Math.max(filters.limit ?? 50, 1), 200);
+  const offset = Math.max(filters.offset ?? 0, 0);
   return db
     .select()
     .from(eventSignals)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(eventSignals.createdAt))
-    .limit(bounded);
+    .limit(bounded)
+    .offset(offset);
+}
+
+export async function updateEventSignalOutcome(input: {
+  eventSignalId: string;
+  status: string;
+  observedEntryAssumption?: number | undefined;
+  exitPrice: number;
+  exitTime: Date;
+  netReturn: number;
+  maxFavorableExcursion?: number | undefined;
+  maxAdverseExcursion?: number | undefined;
+  holdingSeconds: number;
+  closedReason: string;
+}) {
+  return db.transaction(async (tx) => {
+    await tx
+      .update(eventSignals)
+      .set({
+        outcomeStatus: input.status,
+        updatedAt: new Date()
+      })
+      .where(eq(eventSignals.id, input.eventSignalId));
+
+    const [outcome] = await tx
+      .update(eventSignalOutcomes)
+      .set({
+        status: input.status,
+        ...(input.observedEntryAssumption !== undefined
+          ? { observedEntryAssumption: String(input.observedEntryAssumption) }
+          : {}),
+        exitPrice: String(input.exitPrice),
+        exitTime: input.exitTime,
+        netReturn: String(input.netReturn),
+        ...(input.maxFavorableExcursion !== undefined
+          ? { maxFavorableExcursion: String(input.maxFavorableExcursion) }
+          : {}),
+        ...(input.maxAdverseExcursion !== undefined
+          ? { maxAdverseExcursion: String(input.maxAdverseExcursion) }
+          : {}),
+        holdingSeconds: input.holdingSeconds,
+        closedReason: input.closedReason.slice(0, 32),
+        updatedAt: new Date()
+      })
+      .where(eq(eventSignalOutcomes.eventSignalId, input.eventSignalId))
+      .returning();
+
+    return outcome!;
+  });
 }
 
 export async function persistEventBacktestRun(input: {
@@ -842,6 +929,8 @@ export async function persistIntelligenceReportRecord(input: {
         }
       })
       .returning();
+
+    await tx.delete(intelligenceEvidence).where(eq(intelligenceEvidence.reportId, report!.id));
 
     for (const ev of input.evidenceRefs.slice(0, 10)) {
       await tx.insert(intelligenceEvidence).values({

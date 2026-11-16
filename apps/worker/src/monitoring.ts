@@ -15,7 +15,16 @@ import {
   upsertAlert
 } from "@signal-engine/database/system-repository";
 import { enqueueNotification } from "@signal-engine/database/scanner-repository";
-import { backtestQueue, connection, ingestionQueue, monitorQueue, notificationQueue, paperQueue, scanQueue } from "./queues.js";
+import {
+  ALL_INTELLIGENCE_QUEUES,
+  backtestQueue,
+  connection,
+  ingestionQueue,
+  monitorQueue,
+  notificationQueue,
+  paperQueue,
+  scanQueue
+} from "./queues.js";
 import { errorText } from "./format.js";
 
 const TIMEFRAMES: CandleInterval[] = ["1m", "5m", "15m", "1h", "4h", "1d"];
@@ -547,7 +556,8 @@ async function checkQueuesAndBacktests() {
       ["paper", paperQueue],
       ["notifications", notificationQueue],
       ["backtests", backtestQueue],
-      ["monitor", monitorQueue]
+      ["monitor", monitorQueue],
+      ...ALL_INTELLIGENCE_QUEUES
     ] as const;
     const bullmqQueues: Record<string, { waiting: number; active: number; delayed: number; failed: number }> = {};
     let totalFailedJobs = 0;

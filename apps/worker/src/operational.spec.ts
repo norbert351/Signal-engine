@@ -258,9 +258,12 @@ import {
   formatBreakingNewsMessage,
   formatDailyIntelligenceSummaryMessage,
   formatEventAlertMessage,
+  formatEventResultMessage,
   formatEventRiskWarningMessage,
+  formatEventSignalLifecycleMessage,
   formatEventTradeMessage
 } from "./format.js";
+import { enqueueGuardedIntelligenceNotification } from "./intelligence-worker.js";
 import { ALL_INTELLIGENCE_QUEUES } from "./queues.js";
 
 describe("Stage 8 — Event & News Telegram Formatting and Isolated Intelligence Queues", () => {
@@ -320,6 +323,70 @@ describe("Stage 8 — Event & News Telegram Formatting and Isolated Intelligence
       riskWarnings: ["US CPI in 30 minutes"]
     });
     expect(summaryMsg).toContain("SIGNAL ENGINE | DAILY INTELLIGENCE SUMMARY");
+
+    const resultMsg = formatEventResultMessage({
+      eventName: "US CPI YoY",
+      category: "inflation_announcements",
+      actualValue: "2.8%",
+      consensusValue: "3.0%",
+      previousValue: "3.1%",
+      surprisePct: "-6.67",
+      direction: "below_consensus",
+      affectedInstruments: ["EUR_USD", "USD_JPY", "XAU_USD", "BTCUSDT"]
+    });
+    expect(resultMsg).toContain("SIGNAL ENGINE | EVENT RESULT");
+
+    const lifecycleMsg = formatEventSignalLifecycleMessage({
+      strategyKey: "post-event-momentum",
+      eventName: "US CPI YoY",
+      symbol: "BTCUSDT",
+      direction: "LONG",
+      outcomeStatus: "target_hit",
+      exitPrice: 92900,
+      netReturn: 0.013578,
+      reason: "TP1 reached"
+    });
+    expect(lifecycleMsg).toContain("SIGNAL ENGINE | EVENT TRADE UPDATE — TARGET_HIT");
+  });
+
+  it("blocks guarded Telegram intelligence notifications for disabled/unapproved strategies and unauthorized dispatches", async () => {
+    const blockedStrategy = await enqueueGuardedIntelligenceNotification({
+      kind: "event_trade",
+      eventKey: "test:evtrade:1",
+      authorized: true,
+      strategyEnabled: false,
+      strategyApproved: false,
+      payload: {
+        strategyName: "Post-event momentum",
+        eventName: "US CPI",
+        symbol: "EUR_USD",
+        direction: "LONG",
+        entry: 1.0551,
+        stopLoss: 1.0521,
+        takeProfit: 1.0611,
+        rewardRisk: "2.00",
+        evidence: ["Confirmed displacement"],
+        riskClassification: "MODERATE_RISK"
+      }
+    });
+    expect(blockedStrategy.queued).toBe(false);
+    expect(blockedStrategy.blockedReason).toBe("event_strategy_disabled_or_unapproved");
+
+    const blockedAuth = await enqueueGuardedIntelligenceNotification({
+      kind: "event_alert",
+      eventKey: "test:evalert:1",
+      authorized: false,
+      payload: {
+        eventName: "US CPI Release",
+        category: "inflation_announcements",
+        importance: "high",
+        scheduledTimeIso: "2026-11-15T13:30:00.000Z",
+        affectedInstruments: ["EUR_USD"],
+        status: "Awaiting release"
+      }
+    });
+    expect(blockedAuth.queued).toBe(false);
+    expect(blockedAuth.blockedReason).toBe("telegram_dispatch_not_authorized");
   });
 
   it("defines all 9 isolated intelligence BullMQ queues with bounded retry and backoff defaults", () => {

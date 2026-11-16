@@ -201,6 +201,7 @@ const html = `<!doctype html>
     </section>
   </main>
   <script>
+    const esc = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     document.querySelectorAll('#tabs button').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('#tabs button').forEach(b => b.classList.remove('active'));
@@ -214,7 +215,7 @@ const html = `<!doctype html>
       for(const [path,methods] of Object.entries(spec.paths)){
         for(const [method,op] of Object.entries(methods)){
           const tr=document.createElement('tr');
-          tr.innerHTML='<td><code>'+method.toUpperCase()+'</code></td><td><code>'+path+'</code></td><td>'+(op.summary||'')+'</td>';
+          tr.innerHTML='<td><code>'+esc(method.toUpperCase())+'</code></td><td><code>'+esc(path)+'</code></td><td>'+esc(op.summary||'')+'</td>';
           rows.appendChild(tr);
         }
       }
@@ -223,13 +224,33 @@ const html = `<!doctype html>
       const pill=document.getElementById('health-pill');
       pill.textContent='System: '+(h.healthState||h.status);
       pill.className='badge '+(h.status==='ok'?'ok':h.status==='degraded'?'warn':'err');
-      document.getElementById('ov-health').innerHTML='<p>State: <b>'+(h.healthState||h.status)+'</b></p><p>Components tracked: '+(h.components||[]).length+'</p>';
+      document.getElementById('ov-health').innerHTML='<p>State: <b>'+esc(h.healthState||h.status)+'</b></p><p>Components tracked: '+esc((h.components||[]).length)+'</p>';
     }).catch(()=>{});
     fetch('/api/v1/intelligence').then(r=>r.json()).then(intel=>{
-      document.getElementById('ov-ai').innerHTML=(intel.aiProviders||[]).map(p=>'<div><code>'+p.key+'</code>: <span class="badge '+(p.configured?'ok':'warn')+'">'+p.healthStatus+'</span></div>').join('');
+      document.getElementById('ov-ai').innerHTML=(intel.aiProviders||[]).map(p=>'<div><code>'+esc(p.key)+'</code>: <span class="badge '+(p.configured?'ok':'warn')+'">'+esc(p.healthStatus)+'</span></div>').join('');
     }).catch(()=>{});
     Promise.all([fetch('/api/v1/strategies').then(r=>r.json()), fetch('/api/v1/event-strategies').then(r=>r.json())]).then(([ts, es])=>{
-      document.getElementById('ov-strategies').innerHTML='<p>Technical strategies: '+ts.total+' (all disabled/unapproved)</p><p>Event strategies: '+es.total+' (all disabled/unapproved)</p>';
+      document.getElementById('ov-strategies').innerHTML='<p>Technical strategies: '+esc(ts.total)+' (all disabled/unapproved)</p><p>Event strategies: '+esc(es.total)+' (all disabled/unapproved)</p>';
+    }).catch(()=>{});
+    fetch('/api/v1/news?limit=25').then(r=>r.json()).then(res=>{
+      const items=res.data||[];
+      document.getElementById('news-table').innerHTML=items.length===0?'<p>No news articles ingested yet.</p>':'<table><thead><tr><th>Published</th><th>Category</th><th>Importance</th><th>Credibility</th><th>Title</th></tr></thead><tbody>'+items.map(a=>'<tr><td>'+esc(a.publishedAt)+'</td><td><code>'+esc(a.category)+'</code></td><td>'+esc(a.importance)+'</td><td>'+esc(a.credibilityScore)+'</td><td>'+esc(a.title)+'</td></tr>').join('')+'</tbody></table>';
+    }).catch(()=>{});
+    fetch('/api/v1/events/calendar?limit=25').then(r=>r.json()).then(res=>{
+      const items=res.data||[];
+      document.getElementById('calendar-table').innerHTML=items.length===0?'<p>No scheduled/global events recorded yet.</p>':'<table><thead><tr><th>Scheduled</th><th>Event</th><th>Currency</th><th>Consensus</th><th>Actual</th><th>Status</th></tr></thead><tbody>'+items.map(e=>'<tr><td>'+esc(e.scheduledAt||e.publishedAt)+'</td><td>'+esc(e.eventName)+'</td><td><code>'+esc(e.currency)+'</code></td><td>'+esc(e.consensusValue??'N/A')+'</td><td>'+esc(e.actualValue??'Pending')+'</td><td>'+esc(e.status)+'</td></tr>').join('')+'</tbody></table>';
+    }).catch(()=>{});
+    fetch('/api/v1/event-signals?limit=25').then(r=>r.json()).then(res=>{
+      const items=res.data||[];
+      document.getElementById('event-signals-table').innerHTML=items.length===0?'<p>No event trading setups evaluated yet.</p>':'<table><thead><tr><th>Symbol</th><th>Strategy</th><th>Action</th><th>Validation</th><th>Risk</th><th>Reason</th></tr></thead><tbody>'+items.map(s=>'<tr><td><code>'+esc(s.symbol)+'</code></td><td>'+esc(s.strategyKey)+'</td><td>'+esc(s.actionClassification)+'</td><td>'+esc(s.validationStatus)+'</td><td>'+esc(s.riskClassification)+'</td><td>'+esc(s.rejectionReason||'Approved (Pending Strategy Gate)')+'</td></tr>').join('')+'</tbody></table>';
+    }).catch(()=>{});
+    fetch('/api/v1/signals?limit=25').then(r=>r.json()).then(res=>{
+      const items=res.data||[];
+      document.getElementById('tech-signals-table').innerHTML=items.length===0?'<p>No published technical signals (all 6 strategies remain disabled/unapproved).</p>':'<table><thead><tr><th>Symbol</th><th>Timeframe</th><th>Direction</th><th>Strategy</th><th>Status</th></tr></thead><tbody>'+items.map(s=>'<tr><td><code>'+esc(s.symbol)+'</code></td><td>'+esc(s.timeframe)+'</td><td>'+esc(s.direction)+'</td><td>'+esc(s.strategyKey)+'</td><td>'+esc(s.status)+'</td></tr>').join('')+'</tbody></table>';
+    }).catch(()=>{});
+    fetch('/api/v1/intelligence/reports?limit=15').then(r=>r.json()).then(res=>{
+      const items=res.data||[];
+      document.getElementById('reports-list').innerHTML=items.length===0?'<p>No intelligence reports generated yet.</p>':'<table><thead><tr><th>Generated</th><th>Type</th><th>Regime</th><th>Summary</th></tr></thead><tbody>'+items.map(rp=>'<tr><td>'+esc(rp.generatedAt)+'</td><td><code>'+esc(rp.reportType)+'</code></td><td>'+esc(rp.marketRegime)+'</td><td>'+esc(rp.summary)+'</td></tr>').join('')+'</tbody></table>';
     }).catch(()=>{});
   </script>
 </body>

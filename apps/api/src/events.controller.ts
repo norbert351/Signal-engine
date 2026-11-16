@@ -15,14 +15,26 @@ export class EventsController {
     @Query("importance") importance?: string,
     @Query("status") status?: string,
     @Query("country") country?: string,
-    @Query("limit") limit = "50"
+    @Query("limit") limit = "50",
+    @Query("offset") offset = "0"
   ) {
     const parsedLimit = Number(limit);
+    const parsedOffset = Number(offset);
     if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 200) {
       throw new BadRequestException("limit must be an integer from 1 to 200");
     }
-    const data = await listEconomicEvents({ category, importance, status, country, limit: parsedLimit });
-    return { data, total: data.length };
+    if (!Number.isInteger(parsedOffset) || parsedOffset < 0 || parsedOffset > 10000) {
+      throw new BadRequestException("offset must be an integer from 0 to 10000");
+    }
+    const data = await listEconomicEvents({
+      category,
+      importance,
+      status,
+      country,
+      limit: parsedLimit,
+      offset: parsedOffset
+    });
+    return { data, total: data.length, pagination: { limit: parsedLimit, offset: parsedOffset } };
   }
 
   @Get("calendar")
@@ -31,18 +43,30 @@ export class EventsController {
     @Query("to") to?: string,
     @Query("importance") importance?: string,
     @Query("country") country?: string,
-    @Query("limit") limit = "100"
+    @Query("limit") limit = "100",
+    @Query("offset") offset = "0"
   ) {
     const parsedLimit = Number(limit);
+    const parsedOffset = Number(offset);
     if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 200) {
       throw new BadRequestException("limit must be an integer from 1 to 200");
+    }
+    if (!Number.isInteger(parsedOffset) || parsedOffset < 0 || parsedOffset > 10000) {
+      throw new BadRequestException("offset must be an integer from 0 to 10000");
     }
     const fromDate = from ? new Date(from) : undefined;
     const toDate = to ? new Date(to) : undefined;
     if (fromDate && !Number.isFinite(fromDate.getTime())) throw new BadRequestException("from must be a valid ISO date");
     if (toDate && !Number.isFinite(toDate.getTime())) throw new BadRequestException("to must be a valid ISO date");
-    const data = await listEconomicEvents({ from: fromDate, to: toDate, importance, country, limit: parsedLimit });
-    return { data, total: data.length };
+    const data = await listEconomicEvents({
+      from: fromDate,
+      to: toDate,
+      importance,
+      country,
+      limit: parsedLimit,
+      offset: parsedOffset
+    });
+    return { data, total: data.length, pagination: { limit: parsedLimit, offset: parsedOffset } };
   }
 
   @Get("impact")

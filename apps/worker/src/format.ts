@@ -216,3 +216,50 @@ export function formatDailyIntelligenceSummaryMessage(input: {
       : [])
   ].join("\n");
 }
+
+export function formatEventResultMessage(input: {
+  eventName: string;
+  category: string;
+  actualValue: number | string;
+  consensusValue?: number | string | null;
+  previousValue?: number | string | null;
+  surprisePct?: number | string | null;
+  direction?: string;
+  affectedInstruments: string[];
+}): string {
+  return [
+    "<b>SIGNAL ENGINE | EVENT RESULT</b>",
+    "",
+    `Event: ${escapeHtml(input.eventName)}`,
+    `Category: ${escapeHtml(input.category)}`,
+    `Actual: ${escapeHtml(String(input.actualValue))}`,
+    `Consensus: ${input.consensusValue !== null && input.consensusValue !== undefined ? escapeHtml(String(input.consensusValue)) : "Unavailable"}`,
+    `Previous: ${input.previousValue !== null && input.previousValue !== undefined ? escapeHtml(String(input.previousValue)) : "Unavailable"}`,
+    `Surprise: ${input.surprisePct !== null && input.surprisePct !== undefined ? `${escapeHtml(String(input.surprisePct))}% (${escapeHtml(input.direction ?? "unknown")})` : "Unavailable"}`,
+    `Affected instruments: ${escapeHtml(input.affectedInstruments.join(", ") || "None")}`,
+    "Information only. No trade has been placed."
+  ].join("\n");
+}
+
+export function formatEventSignalLifecycleMessage(input: {
+  strategyKey: string;
+  eventName: string;
+  symbol: string;
+  direction: string;
+  outcomeStatus: string;
+  exitPrice?: number;
+  netReturn?: number;
+  reason?: string;
+}): string {
+  return [
+    `<b>SIGNAL ENGINE | EVENT TRADE UPDATE — ${escapeHtml(input.outcomeStatus.toUpperCase())}</b>`,
+    "",
+    `Strategy: ${escapeHtml(input.strategyKey)}`,
+    `Event: ${escapeHtml(input.eventName)}`,
+    `Instrument: ${escapeHtml(input.symbol)} (${escapeHtml(input.direction)})`,
+    ...(input.exitPrice !== undefined ? [`Exit price: ${formatPrice(input.symbol, input.exitPrice)}`] : []),
+    ...(input.netReturn !== undefined ? [`Net return: ${(input.netReturn * 100).toFixed(2)}%`] : []),
+    ...(input.reason ? [`Reason: ${escapeHtml(input.reason)}`] : []),
+    "Signal only. No trade has been placed."
+  ].join("\n");
+}
